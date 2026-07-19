@@ -1,28 +1,44 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { ArrowLeft, User, Mail, Phone, MapPin, Briefcase, Calendar, Info, Map, Building, Edit2, Save, X, Download, Printer, Image as ImageIcon, Activity, Trash2, Search, CalendarRange, Bell, Plus, Check } from 'lucide-react';
-
-// Mock data generator for the profile
-const getMockEmployeeData = (id: string) => ({
-  id: id.toUpperCase(),
-  name: 'John Doe',
-  email: 'john.doe@example.com',
-  mobileNumber: '+91 98765 43210',
-  village: 'Sample Village',
-  address: '1-23, Main Street',
-  mandal: 'Sample Mandal',
-  gender: 'Male',
-  dateOfBirth: '1990-05-15',
-  joiningDate: '2023-01-10',
-  position: 'Field Officer',
-  photo: `https://i.pravatar.cc/150?u=${id}`,
-});
 
 export function EmployeeProfile() {
   const { id } = useParams();
   const navigate = useNavigate();
+  
+  const [employeeData, setEmployeeData] = useState<any>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  
   const [activeTab, setActiveTab] = useState('personal');
   const [selectedMonth, setSelectedMonth] = useState('All Months');
+
+  useEffect(() => {
+    const fetchEmployee = async () => {
+      try {
+        const response = await fetch(`http://localhost:8000/api/employees/${id}`);
+        if (!response.ok) throw new Error('Failed to fetch employee details');
+        
+        const data = await response.json();
+        // Add fallback fields for frontend UI if missing from DB schema
+        setEmployeeData({
+          ...data,
+          village: data.village || 'N/A',
+          mandal: data.mandal || 'N/A',
+          photo: data.photo || `https://i.pravatar.cc/150?u=${data.id}`
+        });
+      } catch (err: any) {
+        console.error(err);
+        setError('Could not load profile. Ensure the database connection is active.');
+      } finally {
+        setIsLoading(false);
+      }
+    };
+    
+    if (id) {
+      fetchEmployee();
+    }
+  }, [id]);
   
   // Work Info State
   const [isEditingWork, setIsEditingWork] = useState(false);
@@ -172,8 +188,34 @@ export function EmployeeProfile() {
     setIsNotifModalOpen(false);
   };
   
-  // In a real app, you would fetch this data using the id
-  const employee = getMockEmployeeData(id || 'EMP001');
+  // We removed the static mock data initialization here
+  
+  if (isLoading) {
+    return (
+      <div className="flex justify-center items-center h-64">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+        <span className="ml-3 text-muted-foreground">Loading Profile from MongoDB...</span>
+      </div>
+    );
+  }
+
+  if (error || !employeeData) {
+    return (
+      <div className="flex flex-col justify-center items-center h-64 space-y-4">
+        <p className="text-red-500 font-medium">{error || 'Employee not found'}</p>
+        <button onClick={() => navigate('/employees')} className="text-blue-600 hover:underline">
+          Return to Employee Management
+        </button>
+      </div>
+    );
+  }
+
+  // Use the dynamically fetched employeeData instead of mock
+  const employee = employeeData;
+
+  const handleLeaveSubmit = (e: React.FormEvent) => {
+    // Logic for submitting leave
+  };
 
   const allAttendanceData = [
     { date: '2026-07-19', in: '09:00 AM', out: '05:30 PM', hrs: '8h 30m', status: 'Absent', start: 'Village A Center', end: 'Mandal HQ' }, // Sunday (will be overridden)

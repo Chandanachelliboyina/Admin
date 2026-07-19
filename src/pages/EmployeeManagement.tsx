@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Pencil, Trash2, Plus, Search, X } from 'lucide-react';
 
 type Employee = {
@@ -11,16 +11,44 @@ type Employee = {
   photo: string;
 };
 
-const INITIAL_EMPLOYEES: Employee[] = [
-  { id: 'EMP001', name: 'Alice Smith', role: 'Software Engineer', department: 'Engineering', phone: '+1 234-567-8900', location: 'New York HQ', photo: 'https://i.pravatar.cc/150?u=a042581f4e29026024d' },
-  { id: 'EMP002', name: 'Bob Johnson', role: 'Product Manager', department: 'Product', phone: '+1 234-567-8901', location: 'San Francisco', photo: 'https://i.pravatar.cc/150?u=a042581f4e29026704d' },
-  { id: 'EMP003', name: 'Charlie Brown', role: 'UX Designer', department: 'Design', phone: '+1 234-567-8902', location: 'London', photo: 'https://i.pravatar.cc/150?u=a04258114e29026702d' },
-];
-
 export function EmployeeManagement() {
-  const [employees, setEmployees] = useState<Employee[]>(INITIAL_EMPLOYEES);
+  const [employees, setEmployees] = useState<Employee[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [newEmployee, setNewEmployee] = useState<Partial<Employee>>({});
+
+  useEffect(() => {
+    const fetchEmployees = async () => {
+      try {
+        const response = await fetch('http://localhost:8000/api/employees');
+        if (!response.ok) throw new Error('Failed to fetch employees');
+        
+        const data = await response.json();
+        
+        // Map backend model to frontend model
+        const mappedEmployees: Employee[] = data.map((emp: any) => ({
+          id: emp.id,
+          name: emp.name || 'Unknown',
+          role: emp.position || 'N/A',
+          department: emp.department || 'Operations', // Fallback if missing
+          phone: emp.mobileNumber || 'N/A',
+          location: emp.address || 'N/A',
+          photo: emp.photo || `https://i.pravatar.cc/150?u=${emp.id}`,
+        }));
+        
+        setEmployees(mappedEmployees);
+      } catch (err: any) {
+        console.error(err);
+        setError('Failed to load employees from database. Make sure the backend is running.');
+      } finally {
+        setIsLoading(false);
+      }
+    };
+    
+    fetchEmployees();
+  }, []);
 
   const handleDelete = (id: string) => {
     if (window.confirm(`Are you sure you want to remove employee ${id}?`)) {
@@ -86,7 +114,22 @@ export function EmployeeManagement() {
               </tr>
             </thead>
             <tbody>
-              {employees.length === 0 ? (
+              {isLoading ? (
+                <tr>
+                  <td colSpan={6} className="px-6 py-8 text-center text-muted-foreground">
+                    <div className="flex justify-center items-center space-x-2">
+                      <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-primary"></div>
+                      <span>Loading employees from MongoDB...</span>
+                    </div>
+                  </td>
+                </tr>
+              ) : error ? (
+                <tr>
+                  <td colSpan={6} className="px-6 py-8 text-center text-red-500 font-medium bg-red-50/50">
+                    {error}
+                  </td>
+                </tr>
+              ) : employees.length === 0 ? (
                 <tr>
                   <td colSpan={6} className="px-6 py-8 text-center text-muted-foreground">
                     No employees found. Add an employee to get started.

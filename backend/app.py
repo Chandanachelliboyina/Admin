@@ -8,7 +8,7 @@ from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 from contextlib import asynccontextmanager
 
-from database import connect_to_mongo, close_mongo_connection, get_db
+from database import connect_to_mongo, close_mongo_connection, get_db, get_previous_db
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -131,11 +131,44 @@ BMM System Administrator
 
 # --- Employee Endpoints ---
 
+@app.get("/api/employees", response_model=List[Employee])
+async def get_all_employees():
+    """Fetch all employees from Previous MongoDB."""
+    db = get_previous_db()
+    if db is None:
+        # Fallback to mock data if DB isn't connected
+        return list(mock_employees.values())
+    
+    employees = []
+    # Query the 'employees' collection
+    cursor = db.employees.find({})
+    async for doc in cursor:
+        doc["id"] = str(doc.get("_id"))
+        employees.append(Employee(**doc))
+    return employees
+
 @app.get("/api/employees/{employee_id}", response_model=Employee)
-def get_employee(employee_id: str):
-    if employee_id not in mock_employees:
+async def get_employee(employee_id: str):
+    """Fetch a single employee by ID from Previous MongoDB."""
+    db = get_previous_db()
+    if db is None:
+        if employee_id not in mock_employees:
+            raise HTTPException(status_code=404, detail="Employee not found")
+        return mock_employees[employee_id]
+        
+    # Search by standard string ID first, or fallback to ObjectId if needed
+    doc = await db.employees.find_one({"id": employee_id})
+    if not doc:
+        # Try matching _id if they passed a 24-char hex string
+        from bson.objectid import ObjectId
+        if len(employee_id) == 24:
+            doc = await db.employees.find_one({"_id": ObjectId(employee_id)})
+    
+    if not doc:
         raise HTTPException(status_code=404, detail="Employee not found")
-    return mock_employees[employee_id]
+        
+    doc["id"] = str(doc.get("_id"))
+    return Employee(**doc)
 
 # --- Notification Endpoints ---
 
