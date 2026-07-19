@@ -1012,32 +1012,35 @@ export function EmployeeProfile() {
 
               <div className="space-y-4">
                 <h3 className="text-lg font-bold text-foreground">Leave Letters</h3>
-                        {l.attachment && !l.attachmentDeleted && (
+                {leaves.length === 0 ? (
+                  <div className="py-8 text-center text-muted-foreground border border-dashed border-border rounded-lg bg-muted/20">
+                    No leave requests found.
+                  </div>
+                ) : leaves.map(l => (
+                  <div key={l.id} className="p-4 border border-border rounded-lg bg-background">
+                    <div className="flex justify-between items-start">
+                      <div>
+                        <div className="flex items-center space-x-2">
+                          <span className="font-medium text-foreground">{l.type}</span>
+                          <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${l.status === 'Pending' ? 'bg-yellow-100 text-yellow-700' : l.status === 'Approved' ? 'bg-emerald-100 text-emerald-700' : 'bg-rose-100 text-rose-700'}`}>
+                            {l.status}
+                          </span>
+                        </div>
+                        <p className="text-sm text-muted-foreground mt-1"><Calendar className="w-3 h-3 inline mr-1"/>{l.startDate} to {l.endDate}</p>
+                        <p className="text-sm mt-2 text-foreground"><span className="font-medium">Reason:</span> {l.reason}</p>
+                        {l.attachment && (
                           <div className="mt-4">
                             <span className="text-sm font-medium text-foreground block mb-2">Attachment (Medical Certificate):</span>
                             <div className="relative group inline-block">
                               <img src={l.attachment} alt="Medical Certificate" className="h-32 w-48 object-cover rounded-md border border-border shadow-sm transition-transform duration-300 group-hover:scale-105" />
-                              <button
-                                onClick={() => handleRemoveAttachment(l.id)}
-                                className="absolute -top-2 -right-2 bg-rose-500 text-white p-1.5 rounded-full opacity-0 group-hover:opacity-100 transition-opacity shadow-md hover:bg-rose-600 focus:outline-none"
-                                title="Remove attachment"
-                              >
-                                <X className="w-3 h-3" />
-                              </button>
                             </div>
-                          </div>
-                        )}
-                        {l.attachment && l.attachmentDeleted && (
-                          <div className="mt-4 p-3 bg-muted/50 border border-dashed border-border rounded-md flex justify-between items-center shadow-inner max-w-sm">
-                            <span className="text-sm text-muted-foreground flex items-center"><Trash2 className="w-4 h-4 mr-2" /> Attachment deleted. Kept in trash for 7 days.</span>
-                            <button onClick={() => setLeaves(leaves.map(lv => lv.id === l.id ? { ...lv, attachmentDeleted: false } : lv))} className="text-blue-600 text-sm font-bold uppercase hover:underline transition-all shrink-0 ml-2">Undo</button>
                           </div>
                         )}
                       </div>
                       {l.status === 'Pending' && (
                         <div className="flex space-x-2">
-                          <button onClick={() => handleLeaveStatus(l.id, 'Approved')} className="p-2 bg-emerald-50 text-emerald-600 hover:bg-emerald-100 rounded-md"><Check className="w-4 h-4"/></button>
-                          <button onClick={() => handleLeaveStatus(l.id, 'Rejected')} className="p-2 bg-rose-50 text-rose-600 hover:bg-rose-100 rounded-md"><X className="w-4 h-4"/></button>
+                          <button className="p-2 bg-emerald-50 text-emerald-600 hover:bg-emerald-100 rounded-md"><Check className="w-4 h-4"/></button>
+                          <button className="p-2 bg-rose-50 text-rose-600 hover:bg-rose-100 rounded-md"><X className="w-4 h-4"/></button>
                         </div>
                       )}
                     </div>
