@@ -80,6 +80,70 @@ mock_employees = {
 
 mock_notifications = []
 
+# ---------------------------------------------------------
+# NEW LIVE DATA ENDPOINTS (UPDATES, ACTIVITIES, LEAVES)
+# ---------------------------------------------------------
+
+@app.get("/api/employees/{employee_id}/updates")
+async def get_employee_updates(employee_id: str):
+    db = get_previous_db()
+    if db is None:
+        return []
+    cursor = db.daily_updates.find({"$or": [{"employee_id": employee_id}, {"id": employee_id}]}).sort("created_at", -1)
+    updates = []
+    async for doc in cursor:
+        created = doc.get("created_at", "")
+        date_str = created.strftime("%Y-%m-%d") if isinstance(created, datetime) else str(created)[:10]
+        updates.append({
+            "id": str(doc["_id"]),
+            "date": date_str,
+            "description": doc.get("notes", ""),
+            "imageUrl": doc.get("images", [""])[0] if doc.get("images") else ""
+        })
+    return updates
+
+@app.get("/api/employees/{employee_id}/activities")
+async def get_employee_activities(employee_id: str):
+    db = get_previous_db()
+    if db is None:
+        return []
+    cursor = db.activities.find({"$or": [{"employee_id": employee_id}, {"id": employee_id}]}).sort("created_at", -1)
+    activities = []
+    async for doc in cursor:
+        created = doc.get("created_at", "")
+        date_str = created.strftime("%Y-%m-%d") if isinstance(created, datetime) else str(created)[:10]
+        activities.append({
+            "id": str(doc["_id"]),
+            "date": date_str,
+            "description": doc.get("notes", doc.get("description", ""))
+        })
+    return activities
+
+@app.get("/api/employees/{employee_id}/leaves")
+async def get_employee_leaves(employee_id: str):
+    db = get_previous_db()
+    if db is None:
+        return []
+    cursor = db.leaves.find({"$or": [{"employee_id": employee_id}, {"id": employee_id}]}).sort("created_at", -1)
+    leaves = []
+    async for doc in cursor:
+        created = doc.get("created_at", "")
+        date_str = created.strftime("%Y-%m-%d") if isinstance(created, datetime) else str(created)[:10]
+        
+        leaves.append({
+            "id": str(doc["_id"]),
+            "type": doc.get("leave_type", "Leave"),
+            "startDate": str(doc.get("leave_date", date_str))[:10],
+            "endDate": str(doc.get("leave_date", date_str))[:10],
+            "reason": doc.get("reason", ""),
+            "status": doc.get("status", "Pending")
+        })
+    return leaves
+
+# ---------------------------------------------------------
+# MOCK NOTIFICATIONS
+# ---------------------------------------------------------
+
 # --- Endpoints ---
 
 @app.get("/")

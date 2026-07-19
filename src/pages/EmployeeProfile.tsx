@@ -19,25 +19,27 @@ export function EmployeeProfile() {
   useEffect(() => {
     const fetchEmployee = async () => {
       try {
-        const [empResponse, attResponse] = await Promise.all([
+        const [empResponse, attResponse, updResponse, actResponse, leaveResponse] = await Promise.all([
           fetch(`http://localhost:8000/api/employees/${id}`),
-          fetch(`http://localhost:8000/api/employees/${id}/attendance`)
+          fetch(`http://localhost:8000/api/employees/${id}/attendance`),
+          fetch(`http://localhost:8000/api/employees/${id}/updates`),
+          fetch(`http://localhost:8000/api/employees/${id}/activities`),
+          fetch(`http://localhost:8000/api/employees/${id}/leaves`)
         ]);
         
         if (!empResponse.ok) throw new Error('Failed to fetch employee details');
         
         const data = await empResponse.json();
-        // Add fallback fields for frontend UI if missing from DB schema
         setEmployeeData({
           ...data,
           village: data.village || 'N/A',
           mandal: data.mandal || 'N/A',
         });
         
-        if (attResponse.ok) {
-          const attData = await attResponse.json();
-          setAttendance(attData);
-        }
+        if (attResponse.ok) setAttendance(await attResponse.json());
+        if (updResponse.ok) setUpdates(await updResponse.json());
+        if (actResponse.ok) setActivities(await actResponse.json());
+        if (leaveResponse.ok) setLeaves(await leaveResponse.json());
       } catch (err: any) {
         console.error(err);
         setError('Could not load profile. Ensure the database connection is active.');
@@ -98,32 +100,14 @@ export function EmployeeProfile() {
     targets: 'Complete survey for 500 households by Q4',
   });
 
-  // Daily Updates State
-  const [updates, setUpdates] = useState([
-    { id: 1, date: '2026-07-18', imageUrl: 'https://images.unsplash.com/photo-1581091226825-a6a2a5aee158?w=500&auto=format&fit=crop&q=60', description: 'Field visit to Village A' },
-    { id: 2, date: '2026-07-17', imageUrl: 'https://images.unsplash.com/photo-1574482620826-40685ca5ebe2?w=500&auto=format&fit=crop&q=60', description: 'Meeting with local leaders' },
-  ]);
+  // Dynamic State for live data
+  const [updates, setUpdates] = useState<any[]>([]);
+  const [activities, setActivities] = useState<any[]>([]);
+  const [leaves, setLeaves] = useState<any[]>([]);
 
-  const today = new Date();
-  const todayStr = today.toISOString().split('T')[0];
-  const yesterdayStr = new Date(today.getTime() - 24 * 60 * 60 * 1000).toISOString().split('T')[0];
-  const tomorrowStr = new Date(today.getTime() + 24 * 60 * 60 * 1000).toISOString().split('T')[0];
-  const nextWeekStr = new Date(today.getTime() + 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
-
-  // Activities State
-  const [activities, setActivities] = useState([
-    { id: 1, date: todayStr, description: 'Completed baseline survey for 50 households in Sector 1.' },
-    { id: 2, date: yesterdayStr, description: 'Conducted awareness camp on sanitation and hygiene.' },
-    { id: 3, date: '2026-06-25', description: 'Submitted monthly progress report.' },
-  ]);
   const [activitySearch, setActivitySearch] = useState('');
   
   // Leave Management State
-  const [leaves, setLeaves] = useState([
-    { id: 1, type: 'Sick Leave', startDate: yesterdayStr, endDate: todayStr, reason: 'Fever and cold', status: 'Pending', attachment: 'https://images.unsplash.com/photo-1581056771107-24ca5f033842?w=500&auto=format&fit=crop&q=60' },
-    { id: 2, type: 'Casual Leave', startDate: tomorrowStr, endDate: nextWeekStr, reason: 'Personal work', status: 'Pending' },
-  ]);
-  const [casualTotal, setCasualTotal] = useState(9);
   const [casualTaken, setCasualTaken] = useState(2);
   const [sickTotal, setSickTotal] = useState(9);
   const [sickTaken, setSickTaken] = useState(1);
@@ -815,62 +799,30 @@ export function EmployeeProfile() {
                       <button onClick={() => setUpdates(updates.map(u => u.id === update.id ? { ...u, isDeleted: false } : u))} className="text-blue-600 text-sm font-bold uppercase hover:underline transition-all">Undo</button>
                     </div>
                   ) : (
-                    <div key={update.id} className="bg-background border border-border rounded-xl overflow-hidden shadow-sm group flex flex-col">
-                      {update.imageUrl && !update.imageDeleted && (
-                        <div className="relative aspect-video bg-muted">
-                          <img src={update.imageUrl} alt={update.description} className="w-full h-full object-cover" />
-                          <div className="absolute top-2 right-2 flex space-x-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                            <button 
-                              onClick={() => handleRemoveUpdateImage(update.id)}
-                              className="p-1.5 bg-rose-500 text-white hover:bg-rose-600 rounded-md shadow-sm transition-colors"
-                              title="Delete Image Only"
-                            >
-                              <Trash2 className="w-4 h-4" />
-                            </button>
-                          </div>
+                    <div key={update.id} className="bg-card border border-border rounded-xl overflow-hidden hover:shadow-md transition-shadow group relative flex flex-col">
+                      <div className="absolute top-2 right-2 flex space-x-2 opacity-0 group-hover:opacity-100 transition-opacity z-10">
+                        <button onClick={() => handleDeleteUpdate(update.id)} className="p-1.5 bg-red-100 text-red-600 rounded-md hover:bg-red-200 transition-colors shadow-sm">
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </div>
+                      {update.imageUrl && (
+                        <div className="h-48 overflow-hidden bg-muted flex items-center justify-center shrink-0">
+                          {update.imageUrl.startsWith('data:image') || update.imageUrl.startsWith('http') ? (
+                            <img src={update.imageUrl} alt="Update" className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" />
+                          ) : (
+                            <div className="text-muted-foreground text-xs p-4 overflow-hidden break-words">{update.imageUrl}</div>
+                          )}
                         </div>
                       )}
-                      {update.imageUrl && update.imageDeleted && (
-                        <div className="relative aspect-video bg-muted/50 border-b border-dashed border-border flex flex-col items-center justify-center space-y-2 shadow-inner">
-                           <span className="text-sm text-muted-foreground px-4 text-center">Image deleted. Available in trash for 7 days.</span>
-                           <button onClick={() => setUpdates(updates.map(u => u.id === update.id ? { ...u, imageDeleted: false } : u))} className="text-blue-600 text-sm font-bold uppercase hover:underline transition-all">Undo Image</button>
-                        </div>
-                      )}
-                      <div className="p-4 flex-1 flex flex-col justify-between">
-                        <div>
-                          <div className="flex items-center text-xs text-muted-foreground mb-2">
-                            <Calendar className="w-3 h-3 mr-1" />
-                            {update.date}
-                          </div>
-                          <p className="text-sm font-medium text-foreground">{update.description}</p>
-                        </div>
-                        <div className="flex justify-end space-x-1 mt-4 pt-3 border-t border-border">
-                          <button 
-                            onClick={() => handleEditUpdate(update.id)}
-                            className="p-1.5 text-blue-600 hover:bg-blue-50 rounded-md transition-colors flex items-center text-xs font-medium"
-                            title="Edit Description"
-                          >
-                            <Edit2 className="w-3 h-3 mr-1" /> Edit
-                          </button>
-                          <button 
-                            onClick={() => handleDeleteUpdate(update.id)}
-                            className="p-1.5 text-rose-600 hover:bg-rose-50 rounded-md transition-colors flex items-center text-xs font-medium"
-                            title="Delete Entire Update"
-                          >
-                            <Trash2 className="w-3 h-3 mr-1" /> Delete Log
-                          </button>
-                        </div>
+                      <div className="p-4 flex-grow flex flex-col justify-between">
+                        <p className="text-sm text-foreground leading-relaxed line-clamp-3">{update.description}</p>
+                        <span className="text-xs font-medium text-muted-foreground mt-3 flex items-center">
+                          <Calendar className="w-3 h-3 mr-1" /> {update.date}
+                        </span>
                       </div>
                     </div>
                   )
                 ))}
-                
-                {updates.length === 0 && (
-                  <div className="col-span-full py-12 text-center text-muted-foreground border-2 border-dashed border-border rounded-xl">
-                    <ImageIcon className="w-12 h-12 mx-auto mb-3 opacity-20" />
-                    <p>No daily updates found.</p>
-                  </div>
-                )}
               </div>
             </div>
           )}
@@ -899,47 +851,29 @@ export function EmployeeProfile() {
               </div>
 
               <div className="space-y-4">
-                {filteredActivities.map(activity => (
-                  activity.isDeleted ? (
-                    <div key={activity.id} className="p-4 border border-dashed border-border rounded-lg bg-muted/50 flex justify-between items-center shadow-inner">
-                      <span className="text-sm text-muted-foreground flex items-center"><Trash2 className="w-4 h-4 mr-2" /> Activity deleted. Available in trash for 7 days.</span>
-                      <button onClick={() => setActivities(activities.map(a => a.id === activity.id ? { ...a, isDeleted: false } : a))} className="text-blue-600 text-sm font-bold uppercase hover:underline transition-all">Undo</button>
-                    </div>
-                  ) : (
-                    <div key={activity.id} className="p-4 border border-border rounded-lg hover:bg-muted/30 transition-colors flex items-start justify-between group">
-                      <div>
-                        <div className="flex items-center text-xs font-medium text-primary mb-1">
-                          <Calendar className="w-3 h-3 mr-1" />
+                {filteredActivities.length === 0 ? (
+                  <div className="py-8 text-center text-muted-foreground border border-dashed border-border rounded-lg bg-muted/20">
+                    No activities found.
+                  </div>
+                ) : filteredActivities.map((activity, index) => (
+                  <div key={activity.id} className="relative pl-8">
+                    {/* Timeline dot */}
+                    <div className="absolute left-[3px] top-1.5 w-2 h-2 rounded-full bg-primary ring-4 ring-background z-10"></div>
+                    
+                    <div className="bg-card border border-border p-4 rounded-xl hover:bg-muted/30 transition-colors group">
+                      <div className="flex justify-between items-start mb-1">
+                        <div className="flex items-center text-xs font-medium text-muted-foreground mb-2">
+                          <Calendar className="w-3.5 h-3.5 mr-1.5" />
                           {activity.date}
                         </div>
-                        <p className="text-sm text-foreground">{activity.description}</p>
-                      </div>
-                      <div className="flex space-x-2 opacity-0 group-hover:opacity-100 transition-opacity ml-4 shrink-0">
-                        <button 
-                          onClick={() => handleEditActivity(activity.id)}
-                          className="p-1.5 text-blue-600 hover:bg-blue-50 rounded-md transition-colors"
-                          title="Edit"
-                        >
-                          <Edit2 className="w-4 h-4" />
-                        </button>
-                        <button 
-                          onClick={() => handleDeleteActivity(activity.id)}
-                          className="p-1.5 text-red-600 hover:bg-red-50 rounded-md transition-colors"
-                          title="Delete"
-                        >
+                        <button onClick={() => handleDeleteActivity(activity.id)} className="text-muted-foreground hover:text-red-600 opacity-0 group-hover:opacity-100 transition-opacity p-1">
                           <Trash2 className="w-4 h-4" />
                         </button>
                       </div>
+                      <p className="text-sm text-foreground leading-relaxed">{activity.description}</p>
                     </div>
-                  )
-                ))}
-
-                {filteredActivities.length === 0 && (
-                  <div className="py-12 text-center text-muted-foreground border-2 border-dashed border-border rounded-xl">
-                    <Activity className="w-12 h-12 mx-auto mb-3 opacity-20" />
-                    <p>No activities found matching your search.</p>
                   </div>
-                )}
+                ))}
               </div>
             </div>
           )}
@@ -1078,18 +1012,6 @@ export function EmployeeProfile() {
 
               <div className="space-y-4">
                 <h3 className="text-lg font-bold text-foreground">Leave Letters</h3>
-                {leaves.map(l => (
-                  <div key={l.id} className="p-4 border border-border rounded-lg bg-background">
-                    <div className="flex justify-between items-start">
-                      <div>
-                        <div className="flex items-center space-x-2">
-                          <span className="font-medium text-foreground">{l.type}</span>
-                          <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${l.status === 'Pending' ? 'bg-yellow-100 text-yellow-700' : l.status === 'Approved' ? 'bg-emerald-100 text-emerald-700' : 'bg-rose-100 text-rose-700'}`}>
-                            {l.status}
-                          </span>
-                        </div>
-                        <p className="text-sm text-muted-foreground mt-1"><Calendar className="w-3 h-3 inline mr-1"/>{l.startDate} to {l.endDate}</p>
-                        <p className="text-sm mt-2 text-foreground"><span className="font-medium">Reason:</span> {l.reason}</p>
                         {l.attachment && !l.attachmentDeleted && (
                           <div className="mt-4">
                             <span className="text-sm font-medium text-foreground block mb-2">Attachment (Medical Certificate):</span>
