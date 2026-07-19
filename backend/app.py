@@ -146,13 +146,13 @@ async def get_all_employees():
         emp_id = str(doc.get("_id") or doc.get("id") or "Unknown")
         employee_data = {
             "id": emp_id,
-            "name": doc.get("name", "Unknown Name"),
-            "position": doc.get("position", doc.get("role", "Employee")),
+            "name": doc.get("full_name", doc.get("name", "Unknown Name")),
+            "position": f"{doc.get('role', '')} {doc.get('department', '')}".strip() or doc.get("position", "Employee"),
             "email": doc.get("email", "N/A"),
-            "mobileNumber": doc.get("mobileNumber", doc.get("phone", "N/A")),
+            "mobileNumber": doc.get("phone", doc.get("mobileNumber", "N/A")),
             "gender": doc.get("gender", "N/A"),
-            "dateOfBirth": doc.get("dateOfBirth", doc.get("dob", "N/A")),
-            "joiningDate": doc.get("joiningDate", "N/A"),
+            "dateOfBirth": doc.get("date_of_birth", doc.get("dateOfBirth", "N/A")),
+            "joiningDate": doc.get("joining_date", doc.get("joiningDate", "N/A")),
             "address": doc.get("address", doc.get("location", "N/A"))
         }
         try:
@@ -212,13 +212,13 @@ async def get_employee(employee_id: str):
     # Fill in missing Pydantic model fields to prevent validation errors
     employee_data = {
         "id": doc["id"],
-        "name": doc.get("name", "Unknown Name"),
-        "position": doc.get("position", doc.get("role", "Employee")),
+        "name": doc.get("full_name", doc.get("name", "Unknown Name")),
+        "position": f"{doc.get('role', '')} {doc.get('department', '')}".strip() or doc.get("position", "Employee"),
         "email": doc.get("email", "N/A"),
-        "mobileNumber": doc.get("mobileNumber", doc.get("phone", "N/A")),
+        "mobileNumber": doc.get("phone", doc.get("mobileNumber", "N/A")),
         "gender": doc.get("gender", "N/A"),
-        "dateOfBirth": doc.get("dateOfBirth", doc.get("dob", "N/A")),
-        "joiningDate": doc.get("joiningDate", "N/A"),
+        "dateOfBirth": doc.get("date_of_birth", doc.get("dateOfBirth", "N/A")),
+        "joiningDate": doc.get("joining_date", doc.get("joiningDate", "N/A")),
         "address": doc.get("address", doc.get("location", "N/A"))
     }
     
