@@ -19,12 +19,14 @@ export function EmployeeProfile() {
   useEffect(() => {
     const fetchEmployee = async () => {
       try {
+        // 15 s timeout — enough for MongoDB Atlas cold-start latency
+        const TIMEOUT = 15000;
         const [empResponse, attResponse, updResponse, actResponse, leaveResponse] = await Promise.all([
-          fetch(`http://localhost:8000/api/employees/${id}`),
-          fetch(`http://localhost:8000/api/employees/${id}/attendance`),
-          fetch(`http://localhost:8000/api/employees/${id}/updates`),
-          fetch(`http://localhost:8000/api/employees/${id}/activities`),
-          fetch(`http://localhost:8000/api/employees/${id}/leaves`)
+          fetch(`http://localhost:8000/api/employees/${id}`, { signal: AbortSignal.timeout(TIMEOUT) }),
+          fetch(`http://localhost:8000/api/employees/${id}/attendance`, { signal: AbortSignal.timeout(TIMEOUT) }),
+          fetch(`http://localhost:8000/api/employees/${id}/updates`, { signal: AbortSignal.timeout(TIMEOUT) }),
+          fetch(`http://localhost:8000/api/employees/${id}/activities`, { signal: AbortSignal.timeout(TIMEOUT) }),
+          fetch(`http://localhost:8000/api/employees/${id}/leaves`, { signal: AbortSignal.timeout(TIMEOUT) })
         ]);
         
         if (!empResponse.ok) throw new Error('Failed to fetch employee details');
@@ -33,24 +35,27 @@ export function EmployeeProfile() {
         setEmployeeData({
           ...data,
           village: data.village || 'N/A',
-          mandal: data.mandal || 'N/A',
+          mandal:  data.mandal  || 'N/A',
+          district: data.district || 'N/A',
         });
         
-        if (attResponse.ok) setAttendance(await attResponse.json());
-        if (updResponse.ok) setUpdates(await updResponse.json());
-        if (actResponse.ok) setActivities(await actResponse.json());
+        if (attResponse.ok)   setAttendance(await attResponse.json());
+        if (updResponse.ok)   setUpdates(await updResponse.json());
+        if (actResponse.ok)   setActivities(await actResponse.json());
         if (leaveResponse.ok) setLeaves(await leaveResponse.json());
       } catch (err: any) {
         console.error(err);
-        setError('Could not load profile. Ensure the database connection is active.');
+        if (err?.name === 'TimeoutError') {
+          setError('Request timed out. MongoDB Atlas is taking too long to respond. Please try again.');
+        } else {
+          setError('Could not load profile. Make sure the backend server (python app.py) is running.');
+        }
       } finally {
         setIsLoading(false);
       }
     };
     
-    if (id) {
-      fetchEmployee();
-    }
+    if (id) fetchEmployee();
   }, [id]);
 
   const handleFileChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -108,9 +113,6 @@ export function EmployeeProfile() {
   const [activitySearch, setActivitySearch] = useState('');
   
   // Leave Management State
-  const [casualTaken, setCasualTaken] = useState(2);
-  const [sickTotal, setSickTotal] = useState(9);
-  const [sickTaken, setSickTaken] = useState(1);
   const [isEditingLeaves, setIsEditingLeaves] = useState(false);
   const [leaveForm, setLeaveForm] = useState({ 
     casualTotal: 9, casualTaken: 2, casualRemaining: 7,

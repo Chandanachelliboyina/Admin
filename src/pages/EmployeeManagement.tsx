@@ -22,7 +22,9 @@ export function EmployeeManagement() {
   useEffect(() => {
     const fetchEmployees = async () => {
       try {
-        const response = await fetch('http://localhost:8000/api/employees');
+        const response = await fetch('http://localhost:8000/api/employees', {
+          signal: AbortSignal.timeout(15000)
+        });
         if (!response.ok) throw new Error('Failed to fetch employees');
         
         const data = await response.json();

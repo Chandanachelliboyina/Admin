@@ -12,10 +12,8 @@ from database import connect_to_mongo, close_mongo_connection, get_db, get_previ
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # Startup: Connect to MongoDB
     await connect_to_mongo()
     yield
-    # Shutdown: Close MongoDB connection
     await close_mongo_connection()
 
 app = FastAPI(
@@ -25,17 +23,15 @@ app = FastAPI(
     lifespan=lifespan
 )
 
-# Configure CORS to allow the React frontend to communicate with this API
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173", "*"], # Restrict this in production
+    allow_origins=["http://localhost:5173", "*"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-# --- Pydantic Models (Data Validation) ---
-
+# ─── Pydantic Models ──────────────────────────────────────────
 class Employee(BaseModel):
     id: str
     name: str
@@ -46,6 +42,9 @@ class Employee(BaseModel):
     dateOfBirth: str
     joiningDate: str
     address: str
+    village: Optional[str] = "N/A"
+    mandal: Optional[str] = "N/A"
+    district: Optional[str] = "N/A"
     profile_picture: Optional[str] = None
 
 class NotificationBase(BaseModel):
@@ -62,8 +61,7 @@ class OTPRequest(BaseModel):
     email: str
     otp: str
 
-# --- In-Memory Database (Replace with PostgreSQL/SQLAlchemy later) ---
-
+# ─── In-Memory Fallback ───────────────────────────────────────
 mock_employees = {
     "EMP001": Employee(
         id="EMP001",
@@ -74,97 +72,62 @@ mock_employees = {
         gender="Male",
         dateOfBirth="1990-05-15",
         joiningDate="2024-01-10",
-        address="123 Gandhi Road, Village A, Mandal HQ"
+        address="123 Gandhi Road, Village A, Mandal HQ",
+        village="Village A",
+        mandal="Mandal HQ",
     )
 }
 
 mock_notifications = []
 
-# ---------------------------------------------------------
-# NEW LIVE DATA ENDPOINTS (UPDATES, ACTIVITIES, LEAVES)
-# ---------------------------------------------------------
+# ─── Helper: map a MongoDB employee doc to the API schema ─────
+def _map_employee(doc: dict, fallback_id: str = "") -> dict:
+    emp_id = str(
+        doc.get("employee_id") or
+        doc.get("id") or
+        doc.get("_id") or
+        fallback_id or
+        "Unknown"
+    )
+    position_str = (
+        f"{doc.get('role', '')} {doc.get('department', '')}".strip()
+        or doc.get("position", "Employee")
+    )
+    return {
+        "id":             emp_id,
+        "name":           doc.get("full_name", doc.get("name", "Unknown Name")),
+        "position":       position_str,
+        "email":          doc.get("email", "N/A"),
+        "mobileNumber":   doc.get("phone", doc.get("mobileNumber", "N/A")),
+        "gender":         doc.get("gender", "N/A"),
+        "dateOfBirth":    doc.get("date_of_birth", doc.get("dateOfBirth", "N/A")),
+        "joiningDate":    doc.get("joining_date", doc.get("joiningDate", "N/A")),
+        "address":        doc.get("address", doc.get("location", "N/A")),
+        "village":        doc.get("village", "N/A"),
+        "mandal":         doc.get("mandal", "N/A"),
+        "district":       doc.get("district", "N/A"),
+        "profile_picture": doc.get("profile_photo_b64", doc.get("profile_picture")),
+    }
 
-@app.get("/api/employees/{employee_id}/updates")
-async def get_employee_updates(employee_id: str):
-    db = get_previous_db()
-    if db is None:
-        return []
-    cursor = db.daily_updates.find({"$or": [{"employee_id": employee_id}, {"id": employee_id}]}).sort("created_at", -1)
-    updates = []
-    async for doc in cursor:
-        created = doc.get("created_at", "")
-        date_str = created.strftime("%Y-%m-%d") if isinstance(created, datetime) else str(created)[:10]
-        updates.append({
-            "id": str(doc["_id"]),
-            "date": date_str,
-            "description": doc.get("notes", ""),
-            "imageUrl": doc.get("images", [""])[0] if doc.get("images") else ""
-        })
-    return updates
-
-@app.get("/api/employees/{employee_id}/activities")
-async def get_employee_activities(employee_id: str):
-    db = get_previous_db()
-    if db is None:
-        return []
-    cursor = db.activities.find({"$or": [{"employee_id": employee_id}, {"id": employee_id}]}).sort("created_at", -1)
-    activities = []
-    async for doc in cursor:
-        created = doc.get("created_at", "")
-        date_str = created.strftime("%Y-%m-%d") if isinstance(created, datetime) else str(created)[:10]
-        activities.append({
-            "id": str(doc["_id"]),
-            "date": date_str,
-            "description": doc.get("notes", doc.get("description", ""))
-        })
-    return activities
-
-@app.get("/api/employees/{employee_id}/leaves")
-async def get_employee_leaves(employee_id: str):
-    db = get_previous_db()
-    if db is None:
-        return []
-    cursor = db.leaves.find({"$or": [{"employee_id": employee_id}, {"id": employee_id}]}).sort("created_at", -1)
-    leaves = []
-    async for doc in cursor:
-        created = doc.get("created_at", "")
-        date_str = created.strftime("%Y-%m-%d") if isinstance(created, datetime) else str(created)[:10]
-        
-        leaves.append({
-            "id": str(doc["_id"]),
-            "type": doc.get("leave_type", "Leave"),
-            "startDate": str(doc.get("leave_date", date_str))[:10],
-            "endDate": str(doc.get("leave_date", date_str))[:10],
-            "reason": doc.get("reason", ""),
-            "status": doc.get("status", "Pending")
-        })
-    return leaves
-
-# ---------------------------------------------------------
-# MOCK NOTIFICATIONS
-# ---------------------------------------------------------
-
-# --- Endpoints ---
-
+# ─── Root ─────────────────────────────────────────────────────
 @app.get("/")
 def read_root():
     return {"message": "Welcome to the BMM Admin FastAPI Backend!"}
 
-# --- Auth / Email Endpoints ---
-
+# ─── Auth / OTP ───────────────────────────────────────────────
 @app.post("/api/auth/send-otp")
 def send_otp_email(request: OTPRequest):
-    """Send an OTP verification email using SMTP."""
     import os
     from dotenv import load_dotenv
     load_dotenv()
 
-    # Load SMTP credentials from .env
     sender_email = os.getenv("SMTP_SENDER_EMAIL")
     sender_password = os.getenv("SMTP_SENDER_PASSWORD")
-    
+
     if not sender_email or not sender_password:
         raise HTTPException(status_code=500, detail="SMTP credentials not configured in backend")
+
+    msg = MIMEMultipart()
     msg['From'] = f"BMM Admin Portal <{sender_email}>"
     msg['To'] = request.email
     msg['Subject'] = "BMM Admin - Your Verification OTP"
@@ -191,185 +154,205 @@ BMM System Administrator
         return {"success": True, "message": "Email sent successfully"}
     except Exception as e:
         print(f"SMTP Error: {str(e)}")
-        # Raise HTTP 500 if email fails to send (e.g. invalid credentials)
         raise HTTPException(status_code=500, detail=f"Failed to send email: {str(e)}")
 
-# --- Employee Endpoints ---
-
+# ─── Employee Endpoints ───────────────────────────────────────
 @app.get("/api/employees", response_model=List[Employee])
 async def get_all_employees():
-    """Fetch all employees from Previous MongoDB."""
+    """Fetch all employees from MongoDB."""
     db = get_previous_db()
     if db is None:
-        # Fallback to mock data if DB isn't connected
         return list(mock_employees.values())
-    
+
     employees = []
-    # Query the 'employees' collection
     cursor = db.employees.find({})
     async for doc in cursor:
-        emp_id = str(doc.get("employee_id") or doc.get("_id") or doc.get("id") or "Unknown")
-        employee_data = {
-            "id": emp_id,
-            "name": doc.get("full_name", doc.get("name", "Unknown Name")),
-            "position": f"{doc.get('role', '')} {doc.get('department', '')}".strip() or doc.get("position", "Employee"),
-            "email": doc.get("email", "N/A"),
-            "mobileNumber": doc.get("phone", doc.get("mobileNumber", "N/A")),
-            "gender": doc.get("gender", "N/A"),
-            "dateOfBirth": doc.get("date_of_birth", doc.get("dateOfBirth", "N/A")),
-            "joiningDate": doc.get("joining_date", doc.get("joiningDate", "N/A")),
-            "address": doc.get("address", doc.get("location", "N/A")),
-            "profile_picture": doc.get("profile_photo_b64", doc.get("profile_picture"))
-        }
         try:
-            employees.append(Employee(**employee_data))
+            employees.append(Employee(**_map_employee(doc)))
         except Exception as e:
             print(f"Skipping employee due to validation error: {e}")
-            
+
     return employees
+
 
 @app.get("/api/employees/{employee_id}", response_model=Employee)
 async def get_employee(employee_id: str):
-    """Fetch a single employee by ID from Previous MongoDB."""
+    """Fetch a single employee by ID from MongoDB."""
     db = get_previous_db()
     if db is None:
         if employee_id not in mock_employees:
             raise HTTPException(status_code=404, detail="Employee not found")
         return mock_employees[employee_id]
-        
-    # Strip whitespace from the requested ID just in case
+
     clean_id = employee_id.strip()
-    
-    # Try exact match first
-    doc = await db.employees.find_one({"employee_id": clean_id})
-    if not doc:
-        doc = await db.employees.find_one({"id": clean_id})
-    if not doc:
-        doc = await db.employees.find_one({"_id": clean_id})
-    if not doc:
-        doc = await db.employees.find_one({"empId": clean_id})
-    if not doc:
-        doc = await db.employees.find_one({"employeeId": clean_id})
-        
-    # If exact match fails, try case-insensitive regex match
+    doc = None
+
+    # Try all possible ID field names
+    for field in ("employee_id", "id", "empId", "employeeId"):
+        doc = await db.employees.find_one({field: clean_id})
+        if doc:
+            break
+
+    # Case-insensitive fallback
     if not doc:
         import re
-        regex_id = re.compile(f"^{clean_id}$", re.IGNORECASE)
-        doc = await db.employees.find_one({"employee_id": regex_id})
-    if not doc:
-        doc = await db.employees.find_one({"id": regex_id})
-    if not doc:
-        doc = await db.employees.find_one({"_id": regex_id})
-    if not doc:
-        doc = await db.employees.find_one({"empId": regex_id})
-    if not doc:
-        doc = await db.employees.find_one({"employeeId": regex_id})
-        
-    if not doc:
-        # 4. Try matching _id if they passed a 24-char hex string (ObjectId)
+        regex_id = re.compile(f"^{re.escape(clean_id)}$", re.IGNORECASE)
+        for field in ("employee_id", "id", "empId", "employeeId"):
+            doc = await db.employees.find_one({field: regex_id})
+            if doc:
+                break
+
+    # ObjectId fallback
+    if not doc and len(employee_id) == 24:
         from bson.objectid import ObjectId
-        if len(employee_id) == 24:
-            try:
-                doc = await db.employees.find_one({"_id": ObjectId(employee_id)})
-            except Exception:
-                pass
-    
+        try:
+            doc = await db.employees.find_one({"_id": ObjectId(employee_id)})
+        except Exception:
+            pass
+
     if not doc:
         raise HTTPException(status_code=404, detail=f"Employee {employee_id} not found in database")
-        
-    doc["id"] = str(doc.get("employee_id") or doc.get("_id") or doc.get("id") or employee_id)
-    
-    # Fill in missing Pydantic model fields to prevent validation errors
-    employee_data = {
-        "id": doc["id"],
-        "name": doc.get("full_name", doc.get("name", "Unknown Name")),
-        "position": f"{doc.get('role', '')} {doc.get('department', '')}".strip() or doc.get("position", "Employee"),
-        "email": doc.get("email", "N/A"),
-        "mobileNumber": doc.get("phone", doc.get("mobileNumber", "N/A")),
-        "gender": doc.get("gender", "N/A"),
-        "dateOfBirth": doc.get("date_of_birth", doc.get("dateOfBirth", "N/A")),
-        "joiningDate": doc.get("joining_date", doc.get("joiningDate", "N/A")),
-        "address": doc.get("address", doc.get("location", "N/A")),
-        "profile_picture": doc.get("profile_photo_b64", doc.get("profile_picture"))
-    }
-    
-    return Employee(**employee_data)
+
+    return Employee(**_map_employee(doc, fallback_id=employee_id))
+
 
 class ProfilePictureUpload(BaseModel):
     image_b64: str
 
 @app.post("/api/employees/{employee_id}/profile-picture")
 async def upload_profile_picture(employee_id: str, payload: ProfilePictureUpload):
-    """Upload a new profile picture for the given employee."""
     db = get_previous_db()
     if db is None:
         raise HTTPException(status_code=500, detail="Database connection not active")
-        
-    # Find employee to get their actual _id
-    doc = await db.employees.find_one({"employee_id": employee_id})
-    if not doc:
-        doc = await db.employees.find_one({"id": employee_id})
-    if not doc:
-        doc = await db.employees.find_one({"_id": employee_id})
-        
+
+    doc = None
+    for field in ("employee_id", "id", "_id"):
+        doc = await db.employees.find_one({field: employee_id})
+        if doc:
+            break
+
     if not doc:
         raise HTTPException(status_code=404, detail="Employee not found")
-        
-    # Update profile picture in both fields to ensure backward compatibility
+
     result = await db.employees.update_one(
         {"_id": doc["_id"]},
         {"$set": {
-            "profile_picture": payload.image_b64,
+            "profile_picture":   payload.image_b64,
             "profile_photo_b64": payload.image_b64
         }}
     )
-    
     if result.modified_count == 1:
         return {"message": "Profile picture updated successfully"}
     return {"message": "Profile picture remained the same"}
 
+
+# ─── Attendance ───────────────────────────────────────────────
 @app.get("/api/employees/{employee_id}/attendance")
 async def get_employee_attendance(employee_id: str):
-    """Fetch real attendance records for an employee."""
+    """Fetch attendance records from the 'attendance' collection."""
     db = get_previous_db()
     if db is None:
-        # Mock fallback
         return [
-            {"date": "2026-07-15", "status": "Present", "checkIn": "09:00 AM", "checkOut": "05:30 PM"},
-            {"date": "2026-07-14", "status": "Present", "checkIn": "08:55 AM", "checkOut": "05:40 PM"}
+            {"date": "2026-07-15", "status": "Present", "checkIn": "09:00 AM", "checkOut": "05:30 PM", "hrs": "8.5 hrs", "start": "Office", "end": "Field"},
+            {"date": "2026-07-14", "status": "Present", "checkIn": "08:55 AM", "checkOut": "05:40 PM", "hrs": "8.7 hrs", "start": "Office", "end": "Field"},
         ]
-        
-    # Look in the employee_attendance collection
-    cursor = db.employee_attendance.find({"employee_id": employee_id}).sort("date", -1).limit(30)
-    attendance_records = []
-    
+
+    # FIX: use 'attendance' collection (not 'employee_attendance')
+    cursor = db.attendance.find({"employee_id": employee_id}).sort("date", -1).limit(90)
+    records = []
     async for att in cursor:
-        check_in = att.get("login_time", "N/A")
-        check_out = att.get("logout_time", "N/A")
-        if check_out == "None" or not check_out:
+        check_out = att.get("logout_time")
+        if not check_out or str(check_out).lower() == "none":
             check_out = "N/A"
-            
-        attendance_records.append({
-            "date": att.get("date", "N/A"),
-            "status": att.get("attendance_status", "Present"),
-            "checkIn": check_in,
-            "checkOut": check_out
+        records.append({
+            "date":     att.get("login_date", att.get("date", "N/A")),
+            "status":   att.get("attendance_status", "Present"),
+            "checkIn":  att.get("login_time", "N/A"),
+            "checkOut": check_out,
+            "hrs":      att.get("hrs", "N/A"),
+            "start":    att.get("full_address", att.get("start", "N/A")),
+            "end":      att.get("logout_full_address", att.get("end", "N/A")),
         })
-        
-    return attendance_records
+    return records
 
-# --- Notification Endpoints ---
 
+# ─── Daily Updates ────────────────────────────────────────────
+@app.get("/api/employees/{employee_id}/updates")
+async def get_employee_updates(employee_id: str):
+    db = get_previous_db()
+    if db is None:
+        return []
+    cursor = db.daily_updates.find(
+        {"$or": [{"employee_id": employee_id}, {"id": employee_id}]}
+    ).sort("created_at", -1)
+    updates = []
+    async for doc in cursor:
+        created = doc.get("created_at", "")
+        date_str = created.strftime("%Y-%m-%d") if isinstance(created, datetime) else str(created)[:10]
+        updates.append({
+            "id":          str(doc["_id"]),
+            "date":        date_str,
+            "description": doc.get("notes", ""),
+            "imageUrl":    (doc.get("images") or [""])[0] if doc.get("images") else "",
+        })
+    return updates
+
+
+# ─── Activities ───────────────────────────────────────────────
+@app.get("/api/employees/{employee_id}/activities")
+async def get_employee_activities(employee_id: str):
+    db = get_previous_db()
+    if db is None:
+        return []
+    cursor = db.activities.find(
+        {"$or": [{"employee_id": employee_id}, {"id": employee_id}]}
+    ).sort("created_at", -1)
+    activities = []
+    async for doc in cursor:
+        created = doc.get("created_at", "")
+        date_str = created.strftime("%Y-%m-%d") if isinstance(created, datetime) else str(created)[:10]
+        activities.append({
+            "id":          str(doc["_id"]),
+            "date":        date_str,
+            "title":       doc.get("title", ""),
+            "description": doc.get("description", doc.get("notes", "")),
+        })
+    return activities
+
+
+# ─── Leaves ───────────────────────────────────────────────────
+@app.get("/api/employees/{employee_id}/leaves")
+async def get_employee_leaves(employee_id: str):
+    db = get_previous_db()
+    if db is None:
+        return []
+    cursor = db.leaves.find(
+        {"$or": [{"employee_id": employee_id}, {"id": employee_id}]}
+    ).sort("created_at", -1)
+    leaves = []
+    async for doc in cursor:
+        created = doc.get("created_at", "")
+        date_str = created.strftime("%Y-%m-%d") if isinstance(created, datetime) else str(created)[:10]
+        leaves.append({
+            "id":        str(doc["_id"]),
+            "type":      doc.get("leave_type", "Leave"),
+            "startDate": str(doc.get("start_date", doc.get("leave_date", date_str)))[:10],
+            "endDate":   str(doc.get("end_date",   doc.get("leave_date", date_str)))[:10],
+            "reason":    doc.get("reason", ""),
+            "status":    doc.get("status", "Pending"),
+        })
+    return leaves
+
+
+# ─── Notifications ────────────────────────────────────────────
 @app.get("/api/notifications", response_model=List[Notification])
 def get_notifications(include_deleted: bool = False):
-    """Fetch all notifications. Optionally include soft-deleted ones (for the trash view)."""
     if include_deleted:
         return mock_notifications
     return [n for n in mock_notifications if not n.isDeleted]
 
 @app.post("/api/notifications", response_model=Notification)
 def create_notification(notif: NotificationBase):
-    """Create a new global notification."""
     new_notif = Notification(
         id=str(len(mock_notifications) + 1),
         title=notif.title,
@@ -377,28 +360,26 @@ def create_notification(notif: NotificationBase):
         date=datetime.now().strftime("%b %d, %Y, %I:%M %p"),
         isDeleted=False
     )
-    mock_notifications.insert(0, new_notif) # Insert at beginning
+    mock_notifications.insert(0, new_notif)
     return new_notif
 
 @app.delete("/api/notifications/{notif_id}")
 def delete_notification(notif_id: str):
-    """Soft-delete a notification."""
     for n in mock_notifications:
         if n.id == notif_id:
             n.isDeleted = True
-            return {"message": "Notification soft-deleted successfully (7-day retention started)"}
+            return {"message": "Notification soft-deleted"}
     raise HTTPException(status_code=404, detail="Notification not found")
 
 @app.post("/api/notifications/{notif_id}/undo")
 def undo_delete_notification(notif_id: str):
-    """Restore a soft-deleted notification."""
     for n in mock_notifications:
         if n.id == notif_id:
             n.isDeleted = False
-            return {"message": "Notification restored successfully"}
+            return {"message": "Notification restored"}
     raise HTTPException(status_code=404, detail="Notification not found")
+
 
 if __name__ == "__main__":
     import uvicorn
-    # Run the server on port 8000
     uvicorn.run("app:app", host="0.0.0.0", port=8000, reload=True)
