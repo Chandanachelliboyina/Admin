@@ -1,4 +1,4 @@
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from typing import List, Optional
@@ -6,11 +6,23 @@ from datetime import datetime
 import smtplib
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
+from contextlib import asynccontextmanager
+
+from database import connect_to_mongo, close_mongo_connection, get_db
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # Startup: Connect to MongoDB
+    await connect_to_mongo()
+    yield
+    # Shutdown: Close MongoDB connection
+    await close_mongo_connection()
 
 app = FastAPI(
     title="BMM Admin API",
-    description="Backend for BMM Admin Employee Management Portal",
-    version="1.0.0"
+    description="Backend for BMM Admin Employee Management Portal with MongoDB",
+    version="1.0.0",
+    lifespan=lifespan
 )
 
 # Configure CORS to allow the React frontend to communicate with this API
@@ -78,12 +90,16 @@ def read_root():
 @app.post("/api/auth/send-otp")
 def send_otp_email(request: OTPRequest):
     """Send an OTP verification email using SMTP."""
-    # IMPORTANT: Replace these with your actual SMTP credentials
-    # If using Gmail, you must generate an "App Password" from your Google Account settings
-    sender_email = "your_email@gmail.com"
-    sender_password = "your_app_password" 
+    import os
+    from dotenv import load_dotenv
+    load_dotenv()
+
+    # Load SMTP credentials from .env
+    sender_email = os.getenv("SMTP_SENDER_EMAIL")
+    sender_password = os.getenv("SMTP_SENDER_PASSWORD")
     
-    msg = MIMEMultipart()
+    if not sender_email or not sender_password:
+        raise HTTPException(status_code=500, detail="SMTP credentials not configured in backend")
     msg['From'] = f"BMM Admin Portal <{sender_email}>"
     msg['To'] = request.email
     msg['Subject'] = "BMM Admin - Your Verification OTP"
