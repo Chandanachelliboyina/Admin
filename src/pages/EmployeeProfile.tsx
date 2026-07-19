@@ -807,7 +807,6 @@ export function EmployeeProfile() {
                         </span>
                       </div>
                     </div>
-                    </div>
                   )
                 ))}
 
