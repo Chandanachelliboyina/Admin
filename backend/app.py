@@ -156,19 +156,48 @@ async def get_employee(employee_id: str):
             raise HTTPException(status_code=404, detail="Employee not found")
         return mock_employees[employee_id]
         
-    # Search by standard string ID first, or fallback to ObjectId if needed
+    # 1. Try matching "id" field
     doc = await db.employees.find_one({"id": employee_id})
-    if not doc:
-        # Try matching _id if they passed a 24-char hex string
-        from bson.objectid import ObjectId
-        if len(employee_id) == 24:
-            doc = await db.employees.find_one({"_id": ObjectId(employee_id)})
     
     if not doc:
-        raise HTTPException(status_code=404, detail="Employee not found")
+        # 2. Try matching "_id" as a plain string
+        doc = await db.employees.find_one({"_id": employee_id})
         
-    doc["id"] = str(doc.get("_id"))
-    return Employee(**doc)
+    if not doc:
+        # 3. Try matching common alternate id fields
+        doc = await db.employees.find_one({"empId": employee_id})
+        
+    if not doc:
+        doc = await db.employees.find_one({"employeeId": employee_id})
+        
+    if not doc:
+        # 4. Try matching _id if they passed a 24-char hex string (ObjectId)
+        from bson.objectid import ObjectId
+        if len(employee_id) == 24:
+            try:
+                doc = await db.employees.find_one({"_id": ObjectId(employee_id)})
+            except Exception:
+                pass
+    
+    if not doc:
+        raise HTTPException(status_code=404, detail=f"Employee {employee_id} not found in database")
+        
+    doc["id"] = str(doc.get("_id") or doc.get("id") or employee_id)
+    
+    # Fill in missing Pydantic model fields to prevent validation errors
+    employee_data = {
+        "id": doc["id"],
+        "name": doc.get("name", "Unknown Name"),
+        "position": doc.get("position", doc.get("role", "Employee")),
+        "email": doc.get("email", "N/A"),
+        "mobileNumber": doc.get("mobileNumber", doc.get("phone", "N/A")),
+        "gender": doc.get("gender", "N/A"),
+        "dateOfBirth": doc.get("dateOfBirth", doc.get("dob", "N/A")),
+        "joiningDate": doc.get("joiningDate", "N/A"),
+        "address": doc.get("address", doc.get("location", "N/A"))
+    }
+    
+    return Employee(**employee_data)
 
 # --- Notification Endpoints ---
 
