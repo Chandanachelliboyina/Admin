@@ -428,47 +428,6 @@ export function EmployeeProfile() {
         </div>
       </div>
 
-      {isUpdateModalOpen && (
-        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-                <label className="block text-sm font-medium text-foreground mb-1">Image URL (Optional)</label>
-                <input
-                  type="text"
-                  required={false}
-                  value={updateForm.imageUrl}
-                  onChange={(e) => setUpdateForm({...updateForm, imageUrl: e.target.value})}
-                  className="w-full border border-input rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary bg-background"
-                  placeholder="https://example.com/image.jpg"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-foreground mb-1">Description</label>
-                <textarea
-                  required
-                  value={updateForm.description}
-                  onChange={(e) => setUpdateForm({...updateForm, description: e.target.value})}
-                  className="w-full border border-input rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary bg-background min-h-[100px]"
-                  placeholder="What was accomplished today?"
-                />
-              </div>
-              <div className="flex justify-end space-x-3 pt-4 border-t border-border">
-                <button
-                  type="button"
-                  onClick={() => setIsUpdateModalOpen(false)}
-                  className="px-4 py-2 text-sm font-medium text-muted-foreground hover:bg-muted rounded-md transition-colors"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  className="px-4 py-2 text-sm font-medium bg-primary text-primary-foreground hover:bg-primary/90 rounded-md transition-colors shadow-sm"
-                >
-                  Save Update
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
 
     </div>
   );
