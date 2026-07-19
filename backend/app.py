@@ -156,19 +156,29 @@ async def get_employee(employee_id: str):
             raise HTTPException(status_code=404, detail="Employee not found")
         return mock_employees[employee_id]
         
-    # 1. Try matching "id" field
-    doc = await db.employees.find_one({"id": employee_id})
+    # Strip whitespace from the requested ID just in case
+    clean_id = employee_id.strip()
     
+    # Try exact match first
+    doc = await db.employees.find_one({"id": clean_id})
     if not doc:
-        # 2. Try matching "_id" as a plain string
-        doc = await db.employees.find_one({"_id": employee_id})
+        doc = await db.employees.find_one({"_id": clean_id})
+    if not doc:
+        doc = await db.employees.find_one({"empId": clean_id})
+    if not doc:
+        doc = await db.employees.find_one({"employeeId": clean_id})
         
+    # If exact match fails, try case-insensitive regex match
     if not doc:
-        # 3. Try matching common alternate id fields
-        doc = await db.employees.find_one({"empId": employee_id})
-        
+        import re
+        regex_id = re.compile(f"^{clean_id}$", re.IGNORECASE)
+        doc = await db.employees.find_one({"id": regex_id})
     if not doc:
-        doc = await db.employees.find_one({"employeeId": employee_id})
+        doc = await db.employees.find_one({"_id": regex_id})
+    if not doc:
+        doc = await db.employees.find_one({"empId": regex_id})
+    if not doc:
+        doc = await db.employees.find_one({"employeeId": regex_id})
         
     if not doc:
         # 4. Try matching _id if they passed a 24-char hex string (ObjectId)
