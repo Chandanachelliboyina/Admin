@@ -143,8 +143,23 @@ async def get_all_employees():
     # Query the 'employees' collection
     cursor = db.employees.find({})
     async for doc in cursor:
-        doc["id"] = str(doc.get("_id"))
-        employees.append(Employee(**doc))
+        emp_id = str(doc.get("_id") or doc.get("id") or "Unknown")
+        employee_data = {
+            "id": emp_id,
+            "name": doc.get("name", "Unknown Name"),
+            "position": doc.get("position", doc.get("role", "Employee")),
+            "email": doc.get("email", "N/A"),
+            "mobileNumber": doc.get("mobileNumber", doc.get("phone", "N/A")),
+            "gender": doc.get("gender", "N/A"),
+            "dateOfBirth": doc.get("dateOfBirth", doc.get("dob", "N/A")),
+            "joiningDate": doc.get("joiningDate", "N/A"),
+            "address": doc.get("address", doc.get("location", "N/A"))
+        }
+        try:
+            employees.append(Employee(**employee_data))
+        except Exception as e:
+            print(f"Skipping employee due to validation error: {e}")
+            
     return employees
 
 @app.get("/api/employees/{employee_id}", response_model=Employee)
