@@ -147,6 +147,10 @@ export function EmployeeProfile() {
     });
   };
 
+  const casualTaken = (leaves || []).filter(l => (l.type || '').includes('Casual') && l.status === 'Approved').length;
+  const sickTotal = 9;
+  const sickTaken = (leaves || []).filter(l => (l.type || '').includes('Sick') && l.status === 'Approved').length;
+
   const handleLeaveStatus = (id: number, status: 'Approved' | 'Rejected') => {
     setLeaves(leaves.map(l => {
       if (l.id === id) {
@@ -163,8 +167,7 @@ export function EmployeeProfile() {
              currentDate.setDate(currentDate.getDate() + 1);
            }
            
-           if (l.type === 'Casual Leave') setCasualTaken(prev => prev + days);
-           else setSickTaken(prev => prev + days);
+           // Logic to update state would go here
         }
         return { ...l, status };
       }
@@ -202,7 +205,7 @@ export function EmployeeProfile() {
 
   // Notifications State
   const [notifications, setNotifications] = useState([
-    { id: 1, title: 'System Maintenance', message: 'System will be down on Saturday.', date: nextWeekStr }
+    { id: 1, title: 'System Maintenance', message: 'System will be down on Saturday.', date: '2025-10-25' }
   ]);
   const [isNotifModalOpen, setIsNotifModalOpen] = useState(false);
   const [currentNotif, setCurrentNotif] = useState<any>(null);
@@ -218,8 +221,6 @@ export function EmployeeProfile() {
     }
     setIsNotifModalOpen(false);
   };
-  
-  // We removed the static mock data initialization here
   
   if (isLoading) {
     return (
@@ -241,14 +242,8 @@ export function EmployeeProfile() {
     );
   }
 
-  // Use the dynamically fetched employeeData instead of mock
   const employee = employeeData;
 
-  const handleLeaveSubmit = (e: React.FormEvent) => {
-    // Logic for submitting leave
-  };
-
-  // Helper to map month names to numbers for filtering
   const getMonthNumber = (monthName: string) => {
     const months = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
     return months.indexOf(monthName.split(' ')[0]) + 1;
@@ -256,27 +251,20 @@ export function EmployeeProfile() {
 
   const filteredAttendanceData = attendance.filter(row => {
     if (selectedMonth === 'All Months') return true;
-    
-    // Extract month and year from selected string (e.g. "July 2026")
     const [monthName, year] = selectedMonth.split(' ');
     const targetMonth = getMonthNumber(monthName);
-    
-    // Extract month and year from row date (e.g. "2026-07-18")
     const [rowYear, rowMonth] = row.date.split('-');
-    
     return parseInt(rowYear) === parseInt(year) && parseInt(rowMonth) === targetMonth;
   });
 
   const handleWorkSave = (e: React.FormEvent) => {
     e.preventDefault();
     setIsEditingWork(false);
-    // Real app would send a PUT/PATCH request to FastAPI here
   };
 
   const handleExportCSV = () => {
     const headers = ['Date', 'Employee Name', 'Employee ID', 'Check In', 'Check Out', 'Hours', 'Status', 'Start Location', 'End Location'];
     const csvRows = [headers.join(',')];
-
     filteredAttendanceData.forEach(row => {
       const values = [
         row.date,
@@ -291,7 +279,6 @@ export function EmployeeProfile() {
       ];
       csvRows.push(values.join(','));
     });
-
     const csvContent = "data:text/csv;charset=utf-8," + csvRows.join('\n');
     const encodedUri = encodeURI(csvContent);
     const link = document.createElement("a");
@@ -328,9 +315,8 @@ export function EmployeeProfile() {
     }
   };
 
-  const filteredActivities = activities.filter(a => 
-    a.date.toLowerCase().includes(activitySearch.toLowerCase()) || 
-    a.description.toLowerCase().includes(activitySearch.toLowerCase())
+  const filteredActivities = (activities || []).filter(a => 
+    (a.description || '').toLowerCase().includes((activitySearch || '').toLowerCase())
   );
 
   return (
@@ -821,8 +807,16 @@ export function EmployeeProfile() {
                         </span>
                       </div>
                     </div>
+                    </div>
                   )
                 ))}
+
+                {(updates || []).length === 0 && (
+                  <div className="col-span-full py-12 text-center text-muted-foreground border-2 border-dashed border-border rounded-xl">
+                    <ImageIcon className="w-12 h-12 mx-auto mb-3 opacity-20" />
+                    <p>No daily updates found.</p>
+                  </div>
+                )}
               </div>
             </div>
           )}
