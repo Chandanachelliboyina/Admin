@@ -155,7 +155,7 @@ async def get_all_employees():
             "dateOfBirth": doc.get("date_of_birth", doc.get("dateOfBirth", "N/A")),
             "joiningDate": doc.get("joining_date", doc.get("joiningDate", "N/A")),
             "address": doc.get("address", doc.get("location", "N/A")),
-            "profile_picture": doc.get("profile_picture")
+            "profile_picture": doc.get("profile_photo_b64", doc.get("profile_picture"))
         }
         try:
             employees.append(Employee(**employee_data))
@@ -226,7 +226,7 @@ async def get_employee(employee_id: str):
         "dateOfBirth": doc.get("date_of_birth", doc.get("dateOfBirth", "N/A")),
         "joiningDate": doc.get("joining_date", doc.get("joiningDate", "N/A")),
         "address": doc.get("address", doc.get("location", "N/A")),
-        "profile_picture": doc.get("profile_picture")
+        "profile_picture": doc.get("profile_photo_b64", doc.get("profile_picture"))
     }
     
     return Employee(**employee_data)
@@ -251,10 +251,13 @@ async def upload_profile_picture(employee_id: str, payload: ProfilePictureUpload
     if not doc:
         raise HTTPException(status_code=404, detail="Employee not found")
         
-    # Update profile picture
+    # Update profile picture in both fields to ensure backward compatibility
     result = await db.employees.update_one(
         {"_id": doc["_id"]},
-        {"$set": {"profile_picture": payload.image_b64}}
+        {"$set": {
+            "profile_picture": payload.image_b64,
+            "profile_photo_b64": payload.image_b64
+        }}
     )
     
     if result.modified_count == 1:
