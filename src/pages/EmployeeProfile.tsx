@@ -300,7 +300,8 @@ export function EmployeeProfile() {
 
 
   const filteredActivities = (activities || []).filter(a => 
-    (a.description || '').toLowerCase().includes((activitySearch || '').toLowerCase())
+    (a.description || '').toLowerCase().includes((activitySearch || '').toLowerCase()) ||
+    (a.date || '').toLowerCase().includes((activitySearch || '').toLowerCase())
   );
 
   return (
