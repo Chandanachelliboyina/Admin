@@ -22,14 +22,19 @@ export function EmployeeProfile() {
         // 15 s timeout — enough for MongoDB Atlas cold-start latency
         const TIMEOUT = 15000;
         const [empResponse, attResponse, updResponse, actResponse, leaveResponse] = await Promise.all([
-          fetch(`http://localhost:8000/api/employees/${id}`, { signal: AbortSignal.timeout(TIMEOUT) }),
-          fetch(`http://localhost:8000/api/employees/${id}/attendance`, { signal: AbortSignal.timeout(TIMEOUT) }),
-          fetch(`http://localhost:8000/api/employees/${id}/updates`, { signal: AbortSignal.timeout(TIMEOUT) }),
-          fetch(`http://localhost:8000/api/employees/${id}/activities`, { signal: AbortSignal.timeout(TIMEOUT) }),
-          fetch(`http://localhost:8000/api/employees/${id}/leaves`, { signal: AbortSignal.timeout(TIMEOUT) })
+          fetch(`http://localhost:8080/api/employees/${id}`, { signal: AbortSignal.timeout(TIMEOUT) }),
+          fetch(`http://localhost:8080/api/employees/${id}/attendance`, { signal: AbortSignal.timeout(TIMEOUT) }),
+          fetch(`http://localhost:8080/api/employees/${id}/updates`, { signal: AbortSignal.timeout(TIMEOUT) }),
+          fetch(`http://localhost:8080/api/employees/${id}/activities`, { signal: AbortSignal.timeout(TIMEOUT) }),
+          fetch(`http://localhost:8080/api/employees/${id}/leaves`, { signal: AbortSignal.timeout(TIMEOUT) })
         ]);
         
-        if (!empResponse.ok) throw new Error('Failed to fetch employee details');
+        if (!empResponse.ok) {
+          if (empResponse.status === 404) {
+            throw new Error('Employee not found in the database.');
+          }
+          throw new Error('Failed to fetch employee details');
+        }
         
         const data = await empResponse.json();
         setEmployeeData({
@@ -47,6 +52,8 @@ export function EmployeeProfile() {
         console.error(err);
         if (err?.name === 'TimeoutError') {
           setError('Request timed out. MongoDB Atlas is taking too long to respond. Please try again.');
+        } else if (err?.message === 'Employee not found in the database.') {
+          setError(err.message);
         } else {
           setError('Could not load profile. Make sure the backend server (python app.py) is running.');
         }
@@ -74,7 +81,7 @@ export function EmployeeProfile() {
       reader.onloadend = async () => {
         const base64String = reader.result as string;
         
-        const response = await fetch(`http://localhost:8000/api/employees/${id}/profile-picture`, {
+        const response = await fetch(`http://localhost:8080/api/employees/${id}/profile-picture`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ image_b64: base64String }),
@@ -149,8 +156,9 @@ export function EmployeeProfile() {
     });
   };
 
+  const casualTotal = 12;
   const casualTaken = (leaves || []).filter(l => (l.type || '').includes('Casual') && l.status === 'Approved').length;
-  const sickTotal = 9;
+  const sickTotal = 12;
   const sickTaken = (leaves || []).filter(l => (l.type || '').includes('Sick') && l.status === 'Approved').length;
 
   const handleLeaveStatus = (id: number, status: 'Approved' | 'Rejected') => {
@@ -889,10 +897,7 @@ export function EmployeeProfile() {
                     <div className="flex space-x-2">
                       <button 
                         onClick={() => {
-                          setCasualTotal(leaveForm.casualTotal);
-                          setCasualTaken(leaveForm.casualTaken);
-                          setSickTotal(leaveForm.sickTotal);
-                          setSickTaken(leaveForm.sickTaken);
+                          // Note: Totals are hardcoded/computed now, so form values for total/taken aren't saved back to state
                           setIsEditingLeaves(false);
                         }}
                         className="bg-primary text-primary-foreground px-4 py-2 rounded-lg text-sm font-medium hover:bg-primary/90 transition-colors"

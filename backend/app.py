@@ -90,23 +90,23 @@ def _map_employee(doc: dict, fallback_id: str = "") -> dict:
         "Unknown"
     )
     position_str = (
-        f"{doc.get('role', '')} {doc.get('department', '')}".strip()
-        or doc.get("position", "Employee")
+        f"{doc.get('role') or ''} {doc.get('department') or ''}".strip()
+        or doc.get("position") or "Employee"
     )
     return {
         "id":             emp_id,
-        "name":           doc.get("full_name", doc.get("name", "Unknown Name")),
+        "name":           doc.get("full_name") or doc.get("name") or "Unknown Name",
         "position":       position_str,
-        "email":          doc.get("email", "N/A"),
-        "mobileNumber":   doc.get("phone", doc.get("mobileNumber", "N/A")),
-        "gender":         doc.get("gender", "N/A"),
-        "dateOfBirth":    doc.get("date_of_birth", doc.get("dateOfBirth", "N/A")),
-        "joiningDate":    doc.get("joining_date", doc.get("joiningDate", "N/A")),
-        "address":        doc.get("address", doc.get("location", "N/A")),
-        "village":        doc.get("village", "N/A"),
-        "mandal":         doc.get("mandal", "N/A"),
-        "district":       doc.get("district", "N/A"),
-        "profile_picture": doc.get("profile_photo_b64", doc.get("profile_picture")),
+        "email":          doc.get("email") or "N/A",
+        "mobileNumber":   doc.get("phone") or doc.get("mobileNumber") or "N/A",
+        "gender":         doc.get("gender") or "N/A",
+        "dateOfBirth":    doc.get("date_of_birth") or doc.get("dateOfBirth") or "N/A",
+        "joiningDate":    doc.get("joining_date") or doc.get("joiningDate") or "N/A",
+        "address":        doc.get("address") or doc.get("location") or "N/A",
+        "village":        doc.get("village") or "N/A",
+        "mandal":         doc.get("mandal") or "N/A",
+        "district":       doc.get("district") or "N/A",
+        "profile_picture": doc.get("profile_photo_b64") or doc.get("profile_picture"),
     }
 
 # ─── Root ─────────────────────────────────────────────────────
@@ -216,6 +216,68 @@ async def get_employee(employee_id: str):
     return Employee(**_map_employee(doc, fallback_id=employee_id))
 
 
+@app.post("/api/employees")
+async def create_employee(employee: Employee):
+    db = get_previous_db()
+    if db is None:
+        mock_employees[employee.id] = employee
+        return {"message": "Employee added successfully (mock)", "id": employee.id}
+        
+    doc = employee.model_dump()
+    doc["employee_id"] = doc.pop("id", "")
+    doc["full_name"] = doc.pop("name", "")
+    doc["role"] = doc.pop("position", "")
+    doc["phone"] = doc.pop("mobileNumber", "")
+    doc["date_of_birth"] = doc.pop("dateOfBirth", "")
+    doc["joining_date"] = doc.pop("joiningDate", "")
+    
+    await db.employees.insert_one(doc)
+    return {"message": "Employee added successfully", "id": employee.id}
+
+
+@app.put("/api/employees/{employee_id}")
+async def update_employee(employee_id: str, employee: Employee):
+    db = get_previous_db()
+    if db is None:
+        if employee_id in mock_employees:
+            mock_employees[employee_id] = employee
+            return {"message": "Employee updated successfully (mock)"}
+        raise HTTPException(status_code=404, detail="Employee not found")
+
+    doc = employee.model_dump()
+    doc["employee_id"] = doc.pop("id", "")
+    doc["full_name"] = doc.pop("name", "")
+    doc["role"] = doc.pop("position", "")
+    doc["phone"] = doc.pop("mobileNumber", "")
+    doc["date_of_birth"] = doc.pop("dateOfBirth", "")
+    doc["joining_date"] = doc.pop("joiningDate", "")
+
+    result = await db.employees.update_one(
+        {"$or": [{"employee_id": employee_id}, {"id": employee_id}]},
+        {"$set": doc}
+    )
+    if result.matched_count == 0:
+        raise HTTPException(status_code=404, detail="Employee not found")
+    return {"message": "Employee updated successfully"}
+
+
+@app.delete("/api/employees/{employee_id}")
+async def delete_employee(employee_id: str):
+    db = get_previous_db()
+    if db is None:
+        if employee_id in mock_employees:
+            del mock_employees[employee_id]
+            return {"message": "Employee deleted successfully (mock)"}
+        raise HTTPException(status_code=404, detail="Employee not found")
+
+    result = await db.employees.delete_one(
+        {"$or": [{"employee_id": employee_id}, {"id": employee_id}]}
+    )
+    if result.deleted_count == 0:
+        raise HTTPException(status_code=404, detail="Employee not found")
+    return {"message": "Employee deleted successfully"}
+
+
 class ProfilePictureUpload(BaseModel):
     image_b64: str
 
@@ -257,8 +319,9 @@ async def get_employee_attendance(employee_id: str):
             {"date": "2026-07-14", "status": "Present", "checkIn": "08:55 AM", "checkOut": "05:40 PM", "hrs": "8.7 hrs", "start": "Office", "end": "Field"},
         ]
 
-    # FIX: use 'attendance' collection (not 'employee_attendance')
-    cursor = db.attendance.find({"employee_id": employee_id}).sort("date", -1).limit(90)
+    import re
+    regex_id = re.compile(f"^{re.escape(employee_id)}$", re.IGNORECASE)
+    cursor = db.attendance.find({"$or": [{"employee_id": regex_id}, {"empId": regex_id}]}).sort("date", -1).limit(90)
     records = []
     async for att in cursor:
         check_out = att.get("logout_time")
@@ -282,8 +345,10 @@ async def get_employee_updates(employee_id: str):
     db = get_previous_db()
     if db is None:
         return []
+    import re
+    regex_id = re.compile(f"^{re.escape(employee_id)}$", re.IGNORECASE)
     cursor = db.daily_updates.find(
-        {"$or": [{"employee_id": employee_id}, {"id": employee_id}]}
+        {"$or": [{"employee_id": regex_id}, {"id": regex_id}, {"empId": regex_id}]}
     ).sort("created_at", -1)
     updates = []
     async for doc in cursor:
@@ -304,8 +369,10 @@ async def get_employee_activities(employee_id: str):
     db = get_previous_db()
     if db is None:
         return []
+    import re
+    regex_id = re.compile(f"^{re.escape(employee_id)}", re.IGNORECASE)
     cursor = db.activities.find(
-        {"$or": [{"employee_id": employee_id}, {"id": employee_id}]}
+        {"$or": [{"employee_id": regex_id}, {"id": regex_id}, {"empId": regex_id}, {"action": regex_id}]}
     ).sort("created_at", -1)
     activities = []
     async for doc in cursor:
@@ -313,9 +380,9 @@ async def get_employee_activities(employee_id: str):
         date_str = created.strftime("%Y-%m-%d") if isinstance(created, datetime) else str(created)[:10]
         activities.append({
             "id":          str(doc["_id"]),
-            "date":        date_str,
-            "title":       doc.get("title", ""),
-            "description": doc.get("description", doc.get("notes", "")),
+            "date":        date_str or str(doc.get("time", ""))[:10],
+            "title":       doc.get("title", doc.get("type", "Activity").capitalize()),
+            "description": doc.get("description", doc.get("notes", doc.get("action", ""))),
         })
     return activities
 
@@ -326,8 +393,10 @@ async def get_employee_leaves(employee_id: str):
     db = get_previous_db()
     if db is None:
         return []
+    import re
+    regex_id = re.compile(f"^{re.escape(employee_id)}$", re.IGNORECASE)
     cursor = db.leaves.find(
-        {"$or": [{"employee_id": employee_id}, {"id": employee_id}]}
+        {"$or": [{"employee_id": regex_id}, {"id": regex_id}]}
     ).sort("created_at", -1)
     leaves = []
     async for doc in cursor:
@@ -340,6 +409,190 @@ async def get_employee_leaves(employee_id: str):
             "endDate":   str(doc.get("end_date",   doc.get("leave_date", date_str)))[:10],
             "reason":    doc.get("reason", ""),
             "status":    doc.get("status", "Pending"),
+        })
+    return leaves
+
+
+# ─── Global Attendance ──────────────────────────────────────────
+@app.get("/api/attendance")
+async def get_all_attendance():
+    """Fetch all attendance records for all employees."""
+    db = get_previous_db()
+    if db is None:
+        return []
+
+    cursor = db.attendance.find({}).sort("date", -1).limit(200)
+    records = []
+    async for att in cursor:
+        check_out = att.get("logout_time")
+        if not check_out or str(check_out).lower() == "none":
+            check_out = "N/A"
+            
+        emp_id = att.get("employee_id", "Unknown")
+        emp_name = att.get("employee_name", att.get("full_name", "Unknown"))
+        
+        # fallback to fetch employee name if not present in attendance doc
+        if emp_name == "Unknown":
+            emp_doc = await db.employees.find_one({"$or": [{"employee_id": emp_id}, {"id": emp_id}]})
+            if emp_doc:
+                emp_name = emp_doc.get("full_name", emp_doc.get("name", "Unknown"))
+                
+        records.append({
+            "id":       str(att.get("_id", "")),
+            "empId":    emp_id,
+            "empName":  emp_name,
+            "date":     att.get("login_date", att.get("date", "N/A")),
+            "status":   att.get("attendance_status", "Present"),
+            "checkIn":  att.get("login_time", "N/A"),
+            "checkOut": check_out,
+            "hrs":      att.get("hrs", "N/A"),
+            "startLoc": att.get("full_address", att.get("start", "N/A")),
+            "endLoc":   att.get("logout_full_address", att.get("end", "N/A")),
+            "selfie":   att.get("login_selfie", ""),
+            "loginLoc": {
+                "lat": att.get("login_lat"),
+                "lng": att.get("login_lng"),
+                "address": att.get("full_address")
+            } if att.get("login_lat") else None,
+            "logoutLoc": {
+                "lat": att.get("logout_lat"),
+                "lng": att.get("logout_lng"),
+                "address": att.get("logout_full_address")
+            } if att.get("logout_lat") else None,
+        })
+    return records
+
+
+# ─── Global Activities ────────────────────────────────────────
+@app.get("/api/activities")
+async def get_all_activities():
+    """Fetch recent activities (from attendance and activities collections)."""
+    db = get_previous_db()
+    if db is None:
+        return []
+    
+    logs = []
+    
+    # Get recent attendance check-ins
+    att_cursor = db.attendance.find({}).sort("login_date", -1).limit(20)
+    async for att in att_cursor:
+        emp_id = att.get("employee_id", "Unknown")
+        time_str = att.get("login_time", "N/A")
+        date_str = att.get("login_date", "N/A")
+        logs.append({
+            "action": f"{emp_id} checked in",
+            "time": f"{date_str} {time_str}",
+            "type": "attendance"
+        })
+        if att.get("logout_time") and str(att.get("logout_time")).lower() != "none":
+            logs.append({
+                "action": f"{emp_id} checked out",
+                "time": f"{date_str} {att.get('logout_time')}",
+                "type": "attendance"
+            })
+            
+    # Get recent general activities
+    act_cursor = db.activities.find({}).sort("created_at", -1).limit(20)
+    async for act in act_cursor:
+        created = act.get("created_at", "")
+        date_str = created.strftime("%Y-%m-%d %H:%M") if isinstance(created, datetime) else str(created)[:16]
+        emp_id = act.get("employee_id", "Unknown")
+        title = act.get("title", "Updated Activity")
+        logs.append({
+            "action": f"{emp_id} - {title}",
+            "time": date_str,
+            "type": "system"
+        })
+        
+    # Get recent leaves
+    leaves_cursor = db.leaves.find({}).sort("created_at", -1).limit(20)
+    async for lv in leaves_cursor:
+        created = lv.get("created_at", "")
+        date_str = created.strftime("%Y-%m-%d %H:%M") if isinstance(created, datetime) else str(created)[:16]
+        emp_id = lv.get("employee_id", "Unknown")
+        type_str = lv.get("leave_type", "Leave")
+        status = lv.get("status", "Pending")
+        logs.append({
+            "action": f"{emp_id} applied for {type_str} ({status})",
+            "time": date_str,
+            "type": "leave"
+        })
+        
+    # Get recent updates
+    updates_cursor = db.daily_updates.find({}).sort("created_at", -1).limit(20)
+    async for upd in updates_cursor:
+        created = upd.get("created_at", "")
+        date_str = created.strftime("%Y-%m-%d %H:%M") if isinstance(created, datetime) else str(created)[:16]
+        emp_id = upd.get("employee_id", "Unknown")
+        logs.append({
+            "action": f"{emp_id} posted a daily update",
+            "time": date_str,
+            "type": "update"
+        })
+        
+    # Sort logs by time descending (simple string sort for now)
+    logs.sort(key=lambda x: x["time"], reverse=True)
+    return logs[:50]
+
+# ─── Dashboard Stats ──────────────────────────────────────────
+@app.get("/api/dashboard/stats")
+async def get_dashboard_stats():
+    db = get_previous_db()
+    if db is None:
+        return {
+            "totalEmployees": len(mock_employees),
+            "presentToday": 0,
+            "activeLocations": 1
+        }
+        
+    total_employees = await db.employees.count_documents({})
+    
+    today_str = datetime.now().strftime("%Y-%m-%d")
+    present_today = len(await db.attendance.distinct("employee_id", {"login_date": today_str}))
+    if present_today == 0:
+        present_today = len(await db.attendance.distinct("employee_id", {"date": today_str}))
+        
+    locations = await db.employees.distinct("mandal")
+    active_locations = len([loc for loc in locations if loc and loc != "N/A"])
+    
+    return {
+        "totalEmployees": total_employees,
+        "presentToday": present_today,
+        "activeLocations": active_locations if active_locations > 0 else 1
+    }
+
+
+# ─── Global Leaves ────────────────────────────────────────────
+@app.get("/api/leaves")
+async def get_all_leaves():
+    """Fetch all leave requests for all employees."""
+    db = get_previous_db()
+    if db is None:
+        return []
+        
+    cursor = db.leaves.find({}).sort("created_at", -1).limit(200)
+    leaves = []
+    async for doc in cursor:
+        created = doc.get("created_at", "")
+        date_str = created.strftime("%Y-%m-%d") if isinstance(created, datetime) else str(created)[:10]
+        
+        emp_id = doc.get("employee_id", "Unknown")
+        emp_name = "Unknown"
+        
+        # Try fetching employee name
+        emp_doc = await db.employees.find_one({"$or": [{"employee_id": emp_id}, {"id": emp_id}]})
+        if emp_doc:
+            emp_name = emp_doc.get("full_name", emp_doc.get("name", "Unknown"))
+            
+        leaves.append({
+            "id":           str(doc["_id"]),
+            "employeeName": emp_name,
+            "employeeId":   emp_id,
+            "type":         doc.get("leave_type", "Leave"),
+            "startDate":    str(doc.get("start_date", doc.get("leave_date", date_str)))[:10],
+            "endDate":      str(doc.get("end_date",   doc.get("leave_date", date_str)))[:10],
+            "reason":       doc.get("reason", ""),
+            "status":       doc.get("status", "Pending"),
         })
     return leaves
 
@@ -382,4 +635,4 @@ def undo_delete_notification(notif_id: str):
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run("app:app", host="0.0.0.0", port=8000, reload=True)
+    uvicorn.run("app:app", host="0.0.0.0", port=8080, reload=True)

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { Pencil, Trash2, Plus, Search, X } from 'lucide-react';
 
 type Employee = {
@@ -19,60 +19,129 @@ export function EmployeeManagement() {
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [newEmployee, setNewEmployee] = useState<Partial<Employee>>({});
 
-  useEffect(() => {
-    const fetchEmployees = async () => {
-      try {
-        const response = await fetch('http://localhost:8000/api/employees', {
-          signal: AbortSignal.timeout(15000)
-        });
-        if (!response.ok) throw new Error('Failed to fetch employees');
-        
-        const data = await response.json();
-        
-        // Map backend model to frontend model
-        const mappedEmployees: Employee[] = data.map((emp: any) => ({
-          id: emp.id,
-          name: emp.name || 'Unknown',
-          role: emp.position || 'N/A',
-          department: emp.department || 'Operations', // Fallback if missing
-          phone: emp.mobileNumber || 'N/A',
-          location: emp.address || 'N/A',
-          photo: emp.photo || `https://i.pravatar.cc/150?u=${emp.id}`,
-        }));
-        
-        setEmployees(mappedEmployees);
-      } catch (err: any) {
-        console.error(err);
-        setError('Failed to load employees from database. Make sure the backend is running.');
-      } finally {
-        setIsLoading(false);
+  const [isEditModalOpen, setIsEditModalOpen] = useState(false);
+  const [editingEmployee, setEditingEmployee] = useState<Partial<Employee>>({});
+
+  const fetchEmployees = useCallback(async () => {
+    setIsLoading(true);
+    setError(null);
+    try {
+      const response = await fetch('http://localhost:8080/api/employees', {
+        signal: AbortSignal.timeout(30000)
+      });
+      if (!response.ok) throw new Error('Failed to fetch employees');
+      
+      const data = await response.json();
+      
+      // Map backend model to frontend model
+      const mappedEmployees: Employee[] = data.map((emp: any) => ({
+        id: emp.id,
+        name: emp.name || 'Unknown',
+        role: emp.position || 'N/A',
+        department: emp.department || 'Operations', // Fallback if missing
+        phone: emp.mobileNumber || 'N/A',
+        location: emp.address || 'N/A',
+        photo: emp.photo || emp.profile_picture || `https://i.pravatar.cc/150?u=${emp.id}`,
+      }));
+      
+      setEmployees(mappedEmployees);
+    } catch (err: any) {
+      console.error(err);
+      if (err?.name === 'TimeoutError') {
+        setError('Request timed out. The database is taking too long to respond. Please try again.');
+      } else {
+        setError(`Failed to load employees from database. Error: ${err.message}`);
       }
-    };
-    
-    fetchEmployees();
+    } finally {
+      setIsLoading(false);
+    }
   }, []);
 
-  const handleDelete = (id: string) => {
+  useEffect(() => {
+    fetchEmployees();
+  }, [fetchEmployees]);
+
+  const handleDelete = async (id: string) => {
     if (window.confirm(`Are you sure you want to remove employee ${id}?`)) {
-      setEmployees(employees.filter(emp => emp.id !== id));
+      try {
+        const response = await fetch(`http://localhost:8080/api/employees/${id}`, {
+          method: 'DELETE',
+        });
+        if (!response.ok) throw new Error('Failed to delete employee');
+        fetchEmployees();
+      } catch (err) {
+        console.error(err);
+        alert('Failed to delete employee');
+      }
     }
   };
 
-  const handleAddSubmit = (e: React.FormEvent) => {
+  const handleAddSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    const id = `EMP00${employees.length + 1}`;
-    const employeeToAdd: Employee = {
+    const id = `EMP${Math.floor(1000 + Math.random() * 9000)}`;
+    
+    const payload = {
       id,
       name: newEmployee.name || 'Unknown',
-      role: newEmployee.role || 'N/A',
+      position: newEmployee.role || 'N/A',
       department: newEmployee.department || 'N/A',
-      phone: newEmployee.phone || 'N/A',
-      location: newEmployee.location || 'N/A',
-      photo: `https://i.pravatar.cc/150?u=${id}`, // random generic photo
+      email: 'N/A',
+      mobileNumber: newEmployee.phone || 'N/A',
+      gender: 'N/A',
+      dateOfBirth: 'N/A',
+      joiningDate: new Date().toISOString().split('T')[0],
+      address: newEmployee.location || 'N/A',
     };
-    setEmployees([...employees, employeeToAdd]);
-    setIsAddModalOpen(false);
-    setNewEmployee({});
+
+    try {
+      const response = await fetch('http://localhost:8080/api/employees', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+      if (!response.ok) throw new Error('Failed to add employee');
+      
+      setIsAddModalOpen(false);
+      setNewEmployee({});
+      fetchEmployees();
+    } catch (err) {
+      console.error(err);
+      alert('Failed to add employee');
+    }
+  };
+
+  const handleEditSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingEmployee.id) return;
+
+    const payload = {
+      id: editingEmployee.id,
+      name: editingEmployee.name || 'Unknown',
+      position: editingEmployee.role || 'N/A',
+      department: editingEmployee.department || 'N/A',
+      email: 'N/A',
+      mobileNumber: editingEmployee.phone || 'N/A',
+      gender: 'N/A',
+      dateOfBirth: 'N/A',
+      joiningDate: 'N/A',
+      address: editingEmployee.location || 'N/A',
+    };
+
+    try {
+      const response = await fetch(`http://localhost:8080/api/employees/${editingEmployee.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+      if (!response.ok) throw new Error('Failed to update employee');
+      
+      setIsEditModalOpen(false);
+      setEditingEmployee({});
+      fetchEmployees();
+    } catch (err) {
+      console.error(err);
+      alert('Failed to update employee');
+    }
   };
 
   return (
@@ -156,7 +225,14 @@ export function EmployeeManagement() {
                     <td className="px-6 py-4 text-foreground">{emp.phone}</td>
                     <td className="px-6 py-4 text-foreground">{emp.location}</td>
                     <td className="px-6 py-4 text-right space-x-2">
-                      <button className="text-blue-600 hover:bg-blue-50 px-3 py-1.5 rounded-md transition-colors text-sm font-medium border border-transparent hover:border-blue-200" title="Edit">
+                      <button 
+                        onClick={() => {
+                          setEditingEmployee(emp);
+                          setIsEditModalOpen(true);
+                        }}
+                        className="text-blue-600 hover:bg-blue-50 px-3 py-1.5 rounded-md transition-colors text-sm font-medium border border-transparent hover:border-blue-200" 
+                        title="Edit"
+                      >
                         Edit
                       </button>
                       <button 
@@ -164,7 +240,7 @@ export function EmployeeManagement() {
                         className="text-red-600 hover:bg-red-50 px-3 py-1.5 rounded-md transition-colors text-sm font-medium border border-red-200 bg-red-50/50" 
                         title="Remove Access"
                       >
-                        Remove Access
+                        Remove
                       </button>
                     </td>
                   </tr>
@@ -256,6 +332,94 @@ export function EmployeeManagement() {
                   className="px-4 py-2 rounded-md bg-primary text-primary-foreground hover:bg-primary/90 transition-colors text-sm font-medium"
                 >
                   Save Employee
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Edit Employee Modal */}
+      {isEditModalOpen && (
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+          <div className="bg-card w-full max-w-md rounded-xl shadow-lg border border-border overflow-hidden">
+            <div className="flex justify-between items-center p-4 border-b border-border">
+              <h3 className="font-semibold text-lg">Edit Employee</h3>
+              <button onClick={() => setIsEditModalOpen(false)} className="text-muted-foreground hover:text-foreground">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            <form onSubmit={handleEditSubmit} className="p-4 space-y-4">
+              <div className="space-y-1">
+                <label className="text-sm font-medium">Full Name</label>
+                <input 
+                  type="text" 
+                  required
+                  value={editingEmployee.name || ''} 
+                  onChange={(e) => setEditingEmployee({...editingEmployee, name: e.target.value})}
+                  className="w-full px-3 py-2 bg-background border border-input rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-primary"
+                  placeholder="Jane Doe"
+                />
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-1">
+                  <label className="text-sm font-medium">Role</label>
+                  <input 
+                    type="text" 
+                    required
+                    value={editingEmployee.role || ''} 
+                    onChange={(e) => setEditingEmployee({...editingEmployee, role: e.target.value})}
+                    className="w-full px-3 py-2 bg-background border border-input rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-primary"
+                    placeholder="Developer"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <label className="text-sm font-medium">Department</label>
+                  <input 
+                    type="text" 
+                    required
+                    value={editingEmployee.department || ''} 
+                    onChange={(e) => setEditingEmployee({...editingEmployee, department: e.target.value})}
+                    className="w-full px-3 py-2 bg-background border border-input rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-primary"
+                    placeholder="Engineering"
+                  />
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-1">
+                  <label className="text-sm font-medium">Phone</label>
+                  <input 
+                    type="text" 
+                    value={editingEmployee.phone || ''} 
+                    onChange={(e) => setEditingEmployee({...editingEmployee, phone: e.target.value})}
+                    className="w-full px-3 py-2 bg-background border border-input rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-primary"
+                    placeholder="+1 555-0000"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <label className="text-sm font-medium">Location</label>
+                  <input 
+                    type="text" 
+                    value={editingEmployee.location || ''} 
+                    onChange={(e) => setEditingEmployee({...editingEmployee, location: e.target.value})}
+                    className="w-full px-3 py-2 bg-background border border-input rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-primary"
+                    placeholder="HQ"
+                  />
+                </div>
+              </div>
+              <div className="pt-4 flex justify-end space-x-2">
+                <button 
+                  type="button" 
+                  onClick={() => setIsEditModalOpen(false)}
+                  className="px-4 py-2 rounded-md border border-input hover:bg-muted transition-colors text-sm font-medium"
+                >
+                  Cancel
+                </button>
+                <button 
+                  type="submit"
+                  className="px-4 py-2 rounded-md bg-primary text-primary-foreground hover:bg-primary/90 transition-colors text-sm font-medium"
+                >
+                  Update Employee
                 </button>
               </div>
             </form>

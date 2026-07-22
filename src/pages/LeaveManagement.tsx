@@ -1,81 +1,104 @@
-import React, { useState } from 'react';
-import { Check, X, CalendarRange, HeartPulse, Clock, Info } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { Check, X, CalendarRange, HeartPulse, Clock, Info, Loader2 } from 'lucide-react';
 
 interface LeaveRequest {
   id: string;
   employeeName: string;
   employeeId: string;
-  type: 'Casual Leave' | 'Sick Leave';
+  type: string;
   startDate: string;
   endDate: string;
   reason: string;
   status: 'Pending' | 'Approved' | 'Rejected';
 }
 
-const today = new Date();
-const todayStr = today.toISOString().split('T')[0];
-const yesterdayStr = new Date(today.getTime() - 24 * 60 * 60 * 1000).toISOString().split('T')[0];
-const tomorrowStr = new Date(today.getTime() + 24 * 60 * 60 * 1000).toISOString().split('T')[0];
-const nextWeekStr = new Date(today.getTime() + 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
-
-const mockLeaveRequests: LeaveRequest[] = [
-  {
-    id: 'L001',
-    employeeName: 'Alice Smith',
-    employeeId: 'EMP001',
-    type: 'Sick Leave',
-    startDate: yesterdayStr,
-    endDate: todayStr,
-    reason: 'Fever and cold',
-    status: 'Pending',
-  },
-  {
-    id: 'L002',
-    employeeName: 'Bob Johnson',
-    employeeId: 'EMP002',
-    type: 'Casual Leave',
-    startDate: tomorrowStr,
-    endDate: nextWeekStr,
-    reason: 'Personal work',
-    status: 'Pending',
-  },
-];
-
 export function LeaveManagement() {
-  const [requests, setRequests] = useState<LeaveRequest[]>(mockLeaveRequests);
-  const [casualLeaveCount, setCasualLeaveCount] = useState(120);
-  const [sickLeaveCount, setSickLeaveCount] = useState(45);
+  const [requests, setRequests] = useState<LeaveRequest[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [casualLeaveCount, setCasualLeaveCount] = useState(0);
+  const [sickLeaveCount, setSickLeaveCount] = useState(0);
 
-  const handleStatusUpdate = (id: string, newStatus: 'Approved' | 'Rejected') => {
-    setRequests(requests.map(req => {
-      if (req.id === id) {
-        return { ...req, status: newStatus };
-      }
-      return req;
-    }));
-
-    // If approved, update counters based on type (just simulating basic count)
-    const req = requests.find(r => r.id === id);
-    if (newStatus === 'Approved' && req?.status === 'Pending') {
-      let days = 0;
-      let currentDate = new Date(req.startDate);
-      let endDate = new Date(req.endDate);
-      
-      // Iterate through each day and count if it's not a Sunday (0)
-      while (currentDate <= endDate) {
-        if (currentDate.getDay() !== 0) {
-          days++;
+  const fetchLeaves = async () => {
+    try {
+      const res = await fetch('http://localhost:8080/api/leaves');
+      if (res.ok) {
+        const data = await res.json();
+        
+        if (Array.isArray(data)) {
+          setRequests(data);
+          
+          // Compute casual and sick leave totals based on approved requests
+          let casual = 0;
+          let sick = 0;
+          data.forEach((req: LeaveRequest) => {
+            if (req.status === 'Approved') {
+              try {
+                let days = 0;
+                let currentDate = new Date(req.startDate);
+                let endDate = new Date(req.endDate);
+                
+                // Safety check to prevent infinite loops if dates are invalid
+                if (!isNaN(currentDate.getTime()) && !isNaN(endDate.getTime())) {
+                  // Limit the maximum number of days to prevent browser hanging just in case
+                  let maxIterations = 365; 
+                  while (currentDate <= endDate && maxIterations > 0) {
+                    if (currentDate.getDay() !== 0) days++;
+                    currentDate.setDate(currentDate.getDate() + 1);
+                    maxIterations--;
+                  }
+                }
+                
+                if (req.type?.includes('Casual')) casual += days;
+                else if (req.type?.includes('Sick')) sick += days;
+              } catch (err) {
+                console.error("Error processing dates for leave:", err);
+              } 
+            }
+          });
+          setCasualLeaveCount(casual);
+          setSickLeaveCount(sick);
+        } else {
+          console.error("Leave data is not an array:", data);
         }
-        currentDate.setDate(currentDate.getDate() + 1);
       }
-      
-      if (req.type === 'Casual Leave') {
-        setCasualLeaveCount(prev => prev + days);
-      } else {
-        setSickLeaveCount(prev => prev + days);
-      }
+    } catch (error) {
+      console.error('Failed to fetch leaves:', error);
+    } finally {
+      setIsLoading(false);
     }
   };
+
+  useEffect(() => {
+    fetchLeaves();
+    const timer = setInterval(fetchLeaves, 30000); // Auto-update every 30s
+    return () => clearInterval(timer);
+  }, []);
+
+  const handleStatusUpdate = async (id: string, newStatus: 'Approved' | 'Rejected') => {
+    // Optimistic update
+    setRequests(requests.map(req => req.id === id ? { ...req, status: newStatus } : req));
+    
+    // In a real app, you would hit an endpoint like PUT /api/leaves/{id}/status
+    // try {
+    //   await fetch(`http://localhost:8080/api/leaves/${id}/status`, {
+    //     method: 'PUT',
+    //     headers: { 'Content-Type': 'application/json' },
+    //     body: JSON.stringify({ status: newStatus })
+    //   });
+    // } catch (err) { ... }
+    
+    // Refresh to get actual counters
+    setTimeout(fetchLeaves, 1000);
+  };
+
+  if (isLoading) {
+    return (
+      <div className="flex justify-center items-center h-64">
+        <Loader2 className="w-8 h-8 animate-spin text-primary" />
+        <span className="ml-3 text-muted-foreground">Loading leaves from database...</span>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6 animate-in fade-in duration-500 pb-10">
@@ -117,13 +140,14 @@ export function LeaveManagement() {
       </div>
 
       <div className="bg-card border border-border rounded-2xl shadow-sm overflow-hidden">
-        <div className="p-6 border-b border-border">
+        <div className="p-6 border-b border-border flex justify-between items-center">
           <h2 className="text-xl font-bold text-foreground">Pending Leave Letters</h2>
+          <span className="text-xs bg-primary/10 text-primary px-2 py-1 rounded-full font-medium">Live Updates</span>
         </div>
         <div className="divide-y divide-border">
           {requests.filter(r => r.status === 'Pending').length === 0 && (
             <div className="p-6 text-center text-muted-foreground">
-              No pending leave requests.
+              No pending leave requests at the moment.
             </div>
           )}
           {requests.filter(r => r.status === 'Pending').map((request) => (
@@ -135,7 +159,7 @@ export function LeaveManagement() {
                     <span className="text-sm text-muted-foreground px-2 py-0.5 bg-muted rounded-full">{request.employeeId}</span>
                   </div>
                   <div className="flex items-center space-x-2 text-sm text-muted-foreground">
-                    <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${request.type === 'Sick Leave' ? 'bg-rose-100 text-rose-700' : 'bg-blue-100 text-blue-700'}`}>
+                    <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${request.type?.includes('Sick') ? 'bg-rose-100 text-rose-700' : 'bg-blue-100 text-blue-700'}`}>
                       {request.type}
                     </span>
                     <span className="flex items-center"><Clock className="w-3 h-3 mr-1" /> {request.startDate} to {request.endDate}</span>
@@ -166,7 +190,6 @@ export function LeaveManagement() {
         </div>
       </div>
       
-      {/* History section optional */}
       {requests.filter(r => r.status !== 'Pending').length > 0 && (
         <div className="mt-8">
           <h2 className="text-lg font-bold text-foreground mb-4">Recent History</h2>

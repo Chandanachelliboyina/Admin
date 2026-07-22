@@ -1,15 +1,47 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Search, ArrowRight, Users, UserCheck, Map, Activity, Clock } from 'lucide-react';
+import { Search, ArrowRight, Users, UserCheck, Map, Activity, Clock, Loader2 } from 'lucide-react';
+
+interface ActivityLog {
+  action: string;
+  time: string;
+  type: string;
+}
 
 export function DashboardHome() {
   const navigate = useNavigate();
   const [searchId, setSearchId] = useState('');
   const [currentTime, setCurrentTime] = useState(new Date());
+  const [activities, setActivities] = useState<ActivityLog[]>([]);
+  const [stats, setStats] = useState({ totalEmployees: 0, presentToday: 0, activeLocations: 0 });
+  const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
     const timer = setInterval(() => setCurrentTime(new Date()), 1000);
     return () => clearInterval(timer);
+  }, []);
+
+  const fetchActivities = async () => {
+    try {
+      const res = await fetch('http://localhost:8080/api/activities');
+      if (res.ok) {
+        setActivities(await res.json());
+      }
+      const statsRes = await fetch('http://localhost:8080/api/dashboard/stats');
+      if (statsRes.ok) {
+        setStats(await statsRes.json());
+      }
+    } catch (error) {
+      console.error('Failed to fetch dashboard data:', error);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchActivities();
+    const actTimer = setInterval(fetchActivities, 30000); // Polling every 30s
+    return () => clearInterval(actTimer);
   }, []);
 
   const handleSearch = (e: React.FormEvent) => {
@@ -81,9 +113,9 @@ export function DashboardHome() {
       {/* Stats Grid */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
         {[
-          { title: 'Total Employees', value: '142', icon: Users, color: 'text-blue-600', bg: 'bg-blue-100', trend: '+12% this month' },
-          { title: 'Present Today', value: '118', icon: UserCheck, color: 'text-emerald-600', bg: 'bg-emerald-100', trend: '83% attendance rate' },
-          { title: 'Active Locations', value: '5', icon: Map, color: 'text-purple-600', bg: 'bg-purple-100', trend: 'Across 3 cities' },
+          { title: 'Total Employees', value: stats.totalEmployees.toString(), icon: Users, color: 'text-blue-600', bg: 'bg-blue-100', trend: 'Total registered' },
+          { title: 'Present Today', value: stats.presentToday.toString(), icon: UserCheck, color: 'text-emerald-600', bg: 'bg-emerald-100', trend: "Today's check-ins" },
+          { title: 'Active Locations', value: stats.activeLocations.toString(), icon: Map, color: 'text-purple-600', bg: 'bg-purple-100', trend: 'Across districts/mandals' },
         ].map((stat, i) => (
           <div key={i} className="bg-card border border-border p-6 rounded-2xl shadow-sm hover:shadow-md transition-shadow group cursor-default">
             <div className="flex items-center justify-between mb-4">
@@ -99,15 +131,23 @@ export function DashboardHome() {
         ))}
       </div>
       
-      {/* Recent Activity Mock */}
+      {/* Live Recent Activity */}
       <div>
-        <h2 className="text-xl font-bold tracking-tight text-foreground mb-4">Recent Activity</h2>
-        <div className="bg-card border border-border rounded-2xl shadow-sm divide-y divide-border">
-          {[
-            { action: 'Alice Smith checked in', time: '10 minutes ago', type: 'attendance' },
-            { action: 'New employee Bob Johnson was added', time: '1 hour ago', type: 'system' },
-            { action: 'Charlie Brown checked out from London Office', time: '2 hours ago', type: 'attendance' },
-          ].map((log, i) => (
+        <div className="flex justify-between items-center mb-4">
+          <h2 className="text-xl font-bold tracking-tight text-foreground flex items-center">
+            Recent Activity Feed
+            {isLoading && <Loader2 className="w-4 h-4 ml-3 animate-spin text-muted-foreground" />}
+          </h2>
+          <span className="text-xs bg-primary/10 text-primary px-2 py-1 rounded-full font-medium">Live Updates</span>
+        </div>
+        
+        <div className="bg-card border border-border rounded-2xl shadow-sm divide-y divide-border overflow-hidden">
+          {activities.length === 0 && !isLoading && (
+            <div className="p-6 text-center text-muted-foreground">
+              No recent activity.
+            </div>
+          )}
+          {activities.map((log, i) => (
             <div key={i} className="p-4 flex items-center justify-between hover:bg-muted/30 transition-colors">
               <div className="flex items-center space-x-4">
                 <div className={`w-2 h-2 rounded-full ${log.type === 'attendance' ? 'bg-emerald-500' : 'bg-blue-500'}`} />
