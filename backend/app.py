@@ -597,40 +597,230 @@ async def get_all_leaves():
     return leaves
 
 
-# ─── Notifications ────────────────────────────────────────────
-@app.get("/api/notifications", response_model=List[Notification])
-def get_notifications(include_deleted: bool = False):
-    if include_deleted:
-        return mock_notifications
-    return [n for n in mock_notifications if not n.isDeleted]
+# ─── Work Information ─────────────────────────────────────────
+class WorkInfo(BaseModel):
+    head: str = ""
+    donorName: str = ""
+    department: str = ""
+    targetVillages: str = ""
+    targetMandal: str = ""
+    targets: str = ""
 
-@app.post("/api/notifications", response_model=Notification)
-def create_notification(notif: NotificationBase):
-    new_notif = Notification(
-        id=str(len(mock_notifications) + 1),
-        title=notif.title,
-        message=notif.message,
-        date=datetime.now().strftime("%b %d, %Y, %I:%M %p"),
-        isDeleted=False
+@app.get("/api/employees/{employee_id}/work-info")
+async def get_work_info(employee_id: str):
+    db = get_previous_db()
+    if db is None: return {}
+    doc = await db.work_info.find_one({"employee_id": employee_id}, {"_id": 0})
+    return doc if doc else {}
+
+@app.put("/api/employees/{employee_id}/work-info")
+async def update_work_info(employee_id: str, info: WorkInfo):
+    db = get_previous_db()
+    if db is None: return {"message": "Mock mode"}
+    await db.work_info.update_one(
+        {"employee_id": employee_id},
+        {"$set": info.model_dump()},
+        upsert=True
     )
-    mock_notifications.insert(0, new_notif)
-    return new_notif
+    return {"message": "Work info updated"}
+
+# ─── Leave Balances ───────────────────────────────────────────
+class LeaveBalances(BaseModel):
+    casualTotal: int
+    casualTaken: int
+    casualRemaining: int
+    sickTotal: int
+    sickTaken: int
+    sickRemaining: int
+
+def calculate_prorated_leaves(joining_date_str: str) -> int:
+    try:
+        joining_date = datetime.strptime(joining_date_str, "%Y-%m-%d")
+        month = joining_date.month
+        # Financial year: April (4) to March (3)
+        if month >= 4:
+            months_remaining = 12 - month + 4
+        else:
+            months_remaining = 4 - month
+        return months_remaining
+    except Exception:
+        return 12
+
+@app.get("/api/employees/{employee_id}/leave-balances")
+async def get_leave_balances(employee_id: str):
+    db = get_previous_db()
+    if db is None: return {"casualTotal": 12, "casualTaken": 0, "casualRemaining": 12, "sickTotal": 12, "sickTaken": 0, "sickRemaining": 12}
+    doc = await db.leave_balances.find_one({"employee_id": employee_id}, {"_id": 0})
+    if doc:
+        return doc
+    
+    # Calculate default based on joining date
+    emp_doc = await db.employees.find_one({"$or": [{"employee_id": employee_id}, {"id": employee_id}]})
+    default_leaves = 12
+    if emp_doc and emp_doc.get("joining_date") and emp_doc.get("joining_date") != "N/A":
+        default_leaves = calculate_prorated_leaves(emp_doc["joining_date"])
+    
+    default_doc = {
+        "employee_id": employee_id,
+        "casualTotal": default_leaves,
+        "casualTaken": 0,
+        "casualRemaining": default_leaves,
+        "sickTotal": default_leaves,
+        "sickTaken": 0,
+        "sickRemaining": default_leaves
+    }
+    await db.leave_balances.insert_one(default_doc.copy())
+    default_doc.pop("_id", None)
+    return default_doc
+
+@app.put("/api/employees/{employee_id}/leave-balances")
+async def update_leave_balances(employee_id: str, balances: LeaveBalances):
+    db = get_previous_db()
+    if db is None: return {"message": "Mock mode"}
+    await db.leave_balances.update_one(
+        {"employee_id": employee_id},
+        {"$set": balances.model_dump()},
+        upsert=True
+    )
+    return {"message": "Leave balances updated"}
+
+class LeaveStatusUpdate(BaseModel):
+    status: str
+
+@app.put("/api/leaves/{leave_id}/status")
+async def update_leave_status(leave_id: str, status_update: LeaveStatusUpdate):
+    db = get_previous_db()
+    if db is None: return {"message": "Mock mode"}
+    from bson.objectid import ObjectId
+    await db.leaves.update_one(
+        {"_id": ObjectId(leave_id)},
+        {"$set": {"status": status_update.status}}
+    )
+    return {"message": "Leave status updated"}
+
+# ─── Daily Updates & Activities Mutations ─────────────────────
+class DailyUpdateCreate(BaseModel):
+    description: str
+    imageUrl: str = ""
+
+class DailyUpdateEdit(BaseModel):
+    description: str
+
+@app.post("/api/employees/{employee_id}/updates")
+async def create_daily_update(employee_id: str, update: DailyUpdateCreate):
+    db = get_previous_db()
+    if db is None: return {"message": "Mock mode"}
+    doc = {
+        "employee_id": employee_id,
+        "notes": update.description,
+        "images": [update.imageUrl] if update.imageUrl else [],
+        "created_at": datetime.now()
+    }
+    await db.daily_updates.insert_one(doc)
+    return {"message": "Update created"}
+
+@app.delete("/api/employees/{employee_id}/updates/{update_id}")
+async def delete_daily_update(employee_id: str, update_id: str):
+    db = get_previous_db()
+    if db is None: return {"message": "Mock mode"}
+    from bson.objectid import ObjectId
+    await db.daily_updates.delete_one({"_id": ObjectId(update_id)})
+    return {"message": "Update deleted"}
+
+@app.put("/api/employees/{employee_id}/updates/{update_id}")
+async def edit_daily_update(employee_id: str, update_id: str, update: DailyUpdateEdit):
+    db = get_previous_db()
+    if db is None: return {"message": "Mock mode"}
+    from bson.objectid import ObjectId
+    await db.daily_updates.update_one(
+        {"_id": ObjectId(update_id)},
+        {"$set": {"notes": update.description}}
+    )
+    return {"message": "Update edited"}
+
+class ActivityEdit(BaseModel):
+    description: str
+
+@app.delete("/api/employees/{employee_id}/activities/{activity_id}")
+async def delete_activity(employee_id: str, activity_id: str):
+    db = get_previous_db()
+    if db is None: return {"message": "Mock mode"}
+    from bson.objectid import ObjectId
+    await db.activities.delete_one({"_id": ObjectId(activity_id)})
+    return {"message": "Activity deleted"}
+
+@app.put("/api/employees/{employee_id}/activities/{activity_id}")
+async def edit_activity(employee_id: str, activity_id: str, activity: ActivityEdit):
+    db = get_previous_db()
+    if db is None: return {"message": "Mock mode"}
+    from bson.objectid import ObjectId
+    await db.activities.update_one(
+        {"_id": ObjectId(activity_id)},
+        {"$set": {"description": activity.description, "notes": activity.description}}
+    )
+    return {"message": "Activity edited"}
+
+
+# ─── Notifications ────────────────────────────────────────────
+@app.get("/api/notifications")
+async def get_notifications(include_deleted: bool = False):
+    db = get_previous_db()
+    if db is None: return []
+    query = {} if include_deleted else {"isDeleted": {"$ne": True}}
+    cursor = db.notifications.find(query).sort("created_at", -1)
+    notifs = []
+    async for doc in cursor:
+        created = doc.get("created_at", datetime.now())
+        notifs.append({
+            "id": str(doc["_id"]),
+            "title": doc.get("title", ""),
+            "message": doc.get("message", ""),
+            "date": created.strftime("%b %d, %Y, %I:%M %p") if isinstance(created, datetime) else str(created)[:16],
+            "isDeleted": doc.get("isDeleted", False)
+        })
+    return notifs
+
+@app.post("/api/notifications")
+async def create_notification(notif: NotificationBase):
+    db = get_previous_db()
+    if db is None: return {"message": "Mock mode"}
+    doc = {
+        "title": notif.title,
+        "message": notif.message,
+        "created_at": datetime.now(),
+        "isDeleted": False
+    }
+    result = await db.notifications.insert_one(doc)
+    doc["id"] = str(result.inserted_id)
+    doc["date"] = doc["created_at"].strftime("%b %d, %Y, %I:%M %p")
+    return doc
+
+@app.put("/api/notifications/{notif_id}")
+async def update_notification(notif_id: str, notif: NotificationBase):
+    db = get_previous_db()
+    if db is None: return {"message": "Mock mode"}
+    from bson.objectid import ObjectId
+    await db.notifications.update_one(
+        {"_id": ObjectId(notif_id)},
+        {"$set": {"title": notif.title, "message": notif.message}}
+    )
+    return {"message": "Notification updated"}
 
 @app.delete("/api/notifications/{notif_id}")
-def delete_notification(notif_id: str):
-    for n in mock_notifications:
-        if n.id == notif_id:
-            n.isDeleted = True
-            return {"message": "Notification soft-deleted"}
-    raise HTTPException(status_code=404, detail="Notification not found")
+async def delete_notification(notif_id: str):
+    db = get_previous_db()
+    if db is None: return {"message": "Mock mode"}
+    from bson.objectid import ObjectId
+    await db.notifications.update_one({"_id": ObjectId(notif_id)}, {"$set": {"isDeleted": True}})
+    return {"message": "Notification soft-deleted"}
 
 @app.post("/api/notifications/{notif_id}/undo")
-def undo_delete_notification(notif_id: str):
-    for n in mock_notifications:
-        if n.id == notif_id:
-            n.isDeleted = False
-            return {"message": "Notification restored"}
-    raise HTTPException(status_code=404, detail="Notification not found")
+async def undo_delete_notification(notif_id: str):
+    db = get_previous_db()
+    if db is None: return {"message": "Mock mode"}
+    from bson.objectid import ObjectId
+    await db.notifications.update_one({"_id": ObjectId(notif_id)}, {"$set": {"isDeleted": False}})
+    return {"message": "Notification restored"}
 
 
 if __name__ == "__main__":

@@ -19,14 +19,16 @@ export function EmployeeProfile() {
   useEffect(() => {
     const fetchEmployee = async () => {
       try {
-        // 15 s timeout — enough for MongoDB Atlas cold-start latency
         const TIMEOUT = 15000;
-        const [empResponse, attResponse, updResponse, actResponse, leaveResponse] = await Promise.all([
+        const [empResponse, attResponse, updResponse, actResponse, leaveResponse, workInfoRes, leaveBalRes, notifRes] = await Promise.all([
           fetch(`http://localhost:8080/api/employees/${id}`, { signal: AbortSignal.timeout(TIMEOUT) }),
           fetch(`http://localhost:8080/api/employees/${id}/attendance`, { signal: AbortSignal.timeout(TIMEOUT) }),
           fetch(`http://localhost:8080/api/employees/${id}/updates`, { signal: AbortSignal.timeout(TIMEOUT) }),
           fetch(`http://localhost:8080/api/employees/${id}/activities`, { signal: AbortSignal.timeout(TIMEOUT) }),
-          fetch(`http://localhost:8080/api/employees/${id}/leaves`, { signal: AbortSignal.timeout(TIMEOUT) })
+          fetch(`http://localhost:8080/api/employees/${id}/leaves`, { signal: AbortSignal.timeout(TIMEOUT) }),
+          fetch(`http://localhost:8080/api/employees/${id}/work-info`, { signal: AbortSignal.timeout(TIMEOUT) }),
+          fetch(`http://localhost:8080/api/employees/${id}/leave-balances`, { signal: AbortSignal.timeout(TIMEOUT) }),
+          fetch(`http://localhost:8080/api/notifications`, { signal: AbortSignal.timeout(TIMEOUT) })
         ]);
         
         if (!empResponse.ok) {
@@ -48,6 +50,15 @@ export function EmployeeProfile() {
         if (updResponse.ok)   setUpdates(await updResponse.json());
         if (actResponse.ok)   setActivities(await actResponse.json());
         if (leaveResponse.ok) setLeaves(await leaveResponse.json());
+        if (workInfoRes.ok) {
+            const wi = await workInfoRes.json();
+            if (Object.keys(wi).length > 0) setWorkInfo(wi);
+        }
+        if (leaveBalRes.ok) {
+            const lb = await leaveBalRes.json();
+            setLeaveBalances({ casualTotal: lb.casualTotal, sickTotal: lb.sickTotal });
+        }
+        if (notifRes.ok) setNotifications(await notifRes.json());
       } catch (err: any) {
         console.error(err);
         if (err?.name === 'TimeoutError') {
@@ -104,12 +115,12 @@ export function EmployeeProfile() {
   // Work Info State
   const [isEditingWork, setIsEditingWork] = useState(false);
   const [workInfo, setWorkInfo] = useState({
-    head: 'Dr. Sarah Connor',
-    donorName: 'Global Foundation',
-    department: 'Field Operations',
-    targetVillages: '15 Villages',
-    targetMandal: 'East Mandal District',
-    targets: 'Complete survey for 500 households by Q4',
+    head: '',
+    donorName: '',
+    department: '',
+    targetVillages: '',
+    targetMandal: '',
+    targets: '',
   });
 
   // Dynamic State for live data
@@ -121,44 +132,19 @@ export function EmployeeProfile() {
   
   // Leave Management State
   const [isEditingLeaves, setIsEditingLeaves] = useState(false);
-  const [leaveForm, setLeaveForm] = useState({ 
-    casualTotal: 9, casualTaken: 2, casualRemaining: 7,
-    sickTotal: 9, sickTaken: 1, sickRemaining: 8
-  });
+  const [leaveBalances, setLeaveBalances] = useState({ casualTotal: 12, sickTotal: 12 });
+  const [leaveForm, setLeaveForm] = useState({ casualTotal: 12, sickTotal: 12 });
 
-  const handleLeaveFormChange = (type: 'casual' | 'sick', field: 'total' | 'taken' | 'remaining', value: number) => {
-    setLeaveForm(prev => {
-      let next = { ...prev };
-      if (type === 'casual') {
-        if (field === 'total') {
-          next.casualTotal = value;
-          next.casualRemaining = value - next.casualTaken;
-        } else if (field === 'taken') {
-          next.casualTaken = value;
-          next.casualRemaining = next.casualTotal - value;
-        } else if (field === 'remaining') {
-          next.casualRemaining = value;
-          next.casualTaken = next.casualTotal - value;
-        }
-      } else {
-        if (field === 'total') {
-          next.sickTotal = value;
-          next.sickRemaining = value - next.sickTaken;
-        } else if (field === 'taken') {
-          next.sickTaken = value;
-          next.sickRemaining = next.sickTotal - value;
-        } else if (field === 'remaining') {
-          next.sickRemaining = value;
-          next.sickTaken = next.sickTotal - value;
-        }
-      }
-      return next;
-    });
+  const handleLeaveFormChange = (type: 'casual' | 'sick', value: number) => {
+    setLeaveForm(prev => ({
+      ...prev,
+      [type === 'casual' ? 'casualTotal' : 'sickTotal']: value
+    }));
   };
 
-  const casualTotal = 12;
+  const casualTotal = leaveBalances.casualTotal;
   const casualTaken = (leaves || []).filter(l => (l.type || '').includes('Casual') && l.status === 'Approved').length;
-  const sickTotal = 12;
+  const sickTotal = leaveBalances.sickTotal;
   const sickTaken = (leaves || []).filter(l => (l.type || '').includes('Sick') && l.status === 'Approved').length;
 
 
@@ -168,38 +154,53 @@ export function EmployeeProfile() {
   const [isUpdateModalOpen, setIsUpdateModalOpen] = useState(false);
   const [updateForm, setUpdateForm] = useState({ imageUrl: '', description: '' });
 
-  const handleSaveUpdate = (e: React.FormEvent) => {
+  const handleSaveUpdate = async (e: React.FormEvent) => {
     e.preventDefault();
-    const fullDate = new Date().toLocaleString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit', hour12: true });
-    setUpdates([{ 
-      id: Date.now(), 
-      date: fullDate, 
-      imageUrl: updateForm.imageUrl || 'https://images.unsplash.com/photo-1542601906990-b4d3fb778b09?w=500&auto=format&fit=crop&q=60', 
-      description: updateForm.description 
-    }, ...updates]);
-    setIsUpdateModalOpen(false);
-    setUpdateForm({ imageUrl: '', description: '' });
+    try {
+      const res = await fetch(`http://localhost:8080/api/employees/${id}/updates`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(updateForm)
+      });
+      if (res.ok) {
+        const updResponse = await fetch(`http://localhost:8080/api/employees/${id}/updates`);
+        if (updResponse.ok) setUpdates(await updResponse.json());
+      }
+      setIsUpdateModalOpen(false);
+      setUpdateForm({ imageUrl: '', description: '' });
+    } catch(err) {
+        console.error(err);
+    }
   };
 
 
 
   // Notifications State
-  const [notifications, setNotifications] = useState([
-    { id: 1, title: 'System Maintenance', message: 'System will be down on Saturday.', date: '2025-10-25' }
-  ]);
+  const [notifications, setNotifications] = useState<any[]>([]);
   const [isNotifModalOpen, setIsNotifModalOpen] = useState(false);
   const [currentNotif, setCurrentNotif] = useState<any>(null);
   const [notifForm, setNotifForm] = useState({ title: '', message: '' });
 
-  const handleSaveNotif = (e: React.FormEvent) => {
+  const handleSaveNotif = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (currentNotif) {
-      setNotifications(notifications.map(n => n.id === currentNotif.id ? { ...n, title: notifForm.title, message: notifForm.message } : n));
-    } else {
-      const fullDate = new Date().toLocaleString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit', hour12: true });
-      setNotifications([{ id: Date.now(), title: notifForm.title, message: notifForm.message, date: fullDate }, ...notifications]);
-    }
-    setIsNotifModalOpen(false);
+    try {
+      if (currentNotif) {
+        await fetch(`http://localhost:8080/api/notifications/${currentNotif.id}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(notifForm)
+        });
+      } else {
+        await fetch(`http://localhost:8080/api/notifications`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(notifForm)
+        });
+      }
+      const notifRes = await fetch(`http://localhost:8080/api/notifications`);
+      if (notifRes.ok) setNotifications(await notifRes.json());
+      setIsNotifModalOpen(false);
+    } catch (err) { console.error(err); }
   };
   
   if (isLoading) {
@@ -237,9 +238,19 @@ export function EmployeeProfile() {
     return parseInt(rowYear) === parseInt(year) && parseInt(rowMonth) === targetMonth;
   });
 
-  const handleWorkSave = (e: React.FormEvent) => {
+  const handleWorkSave = async (e: React.FormEvent) => {
     e.preventDefault();
-    setIsEditingWork(false);
+    try {
+      await fetch(`http://localhost:8080/api/employees/${id}/work-info`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(workInfo)
+      });
+      setIsEditingWork(false);
+    } catch (err) {
+      console.error(err);
+      alert('Failed to save work info');
+    }
   };
 
   const handleExportCSV = () => {
@@ -269,17 +280,19 @@ export function EmployeeProfile() {
     document.body.removeChild(link);
   };
 
-  const handleDeleteUpdate = (id: number) => {
+  const handleDeleteUpdate = async (updateId: string) => {
     if (window.confirm('Are you sure you want to delete this daily update?')) {
-      setUpdates(updates.map(u => u.id === id ? { ...u, isDeleted: true } : u));
+      await fetch(`http://localhost:8080/api/employees/${id}/updates/${updateId}`, { method: 'DELETE' });
+      setUpdates(updates.filter(u => u.id !== updateId));
     }
   };
 
 
 
-  const handleDeleteActivity = (id: number) => {
+  const handleDeleteActivity = async (activityId: string) => {
     if (window.confirm('Are you sure you want to delete this activity?')) {
-      setActivities(activities.map(a => a.id === id ? { ...a, isDeleted: true } : a));
+      await fetch(`http://localhost:8080/api/employees/${id}/activities/${activityId}`, { method: 'DELETE' });
+      setActivities(activities.filter(a => a.id !== activityId));
     }
   };
 
@@ -748,13 +761,6 @@ export function EmployeeProfile() {
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
                 {updates.map(update => (
-                  update.isDeleted ? (
-                    <div key={update.id} className="bg-muted/50 border border-dashed border-border rounded-xl p-6 flex flex-col justify-center items-center text-center space-y-3 shadow-inner">
-                      <Trash2 className="w-6 h-6 text-muted-foreground/50" />
-                      <span className="text-sm text-muted-foreground">Daily update deleted. Available in trash for 7 days.</span>
-                      <button onClick={() => setUpdates(updates.map(u => u.id === update.id ? { ...u, isDeleted: false } : u))} className="text-blue-600 text-sm font-bold uppercase hover:underline transition-all">Undo</button>
-                    </div>
-                  ) : (
                     <div key={update.id} className="bg-card border border-border rounded-xl overflow-hidden hover:shadow-md transition-shadow group relative flex flex-col">
                       <div className="absolute top-2 right-2 flex space-x-2 opacity-0 group-hover:opacity-100 transition-opacity z-10">
                         <button onClick={() => handleDeleteUpdate(update.id)} className="p-1.5 bg-red-100 text-red-600 rounded-md hover:bg-red-200 transition-colors shadow-sm">
@@ -777,7 +783,6 @@ export function EmployeeProfile() {
                         </span>
                       </div>
                     </div>
-                  )
                 ))}
 
                 {(updates || []).length === 0 && (
@@ -856,9 +861,23 @@ export function EmployeeProfile() {
                   {isEditingLeaves ? (
                     <div className="flex space-x-2">
                       <button 
-                        onClick={() => {
-                          // Note: Totals are hardcoded/computed now, so form values for total/taken aren't saved back to state
-                          setIsEditingLeaves(false);
+                        onClick={async () => {
+                          try {
+                            const newBalances = {
+                                casualTotal: leaveForm.casualTotal, casualTaken: casualTaken, casualRemaining: leaveForm.casualTotal - casualTaken,
+                                sickTotal: leaveForm.sickTotal, sickTaken: sickTaken, sickRemaining: leaveForm.sickTotal - sickTaken
+                            };
+                            await fetch(`http://localhost:8080/api/employees/${id}/leave-balances`, {
+                                method: 'PUT',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify(newBalances)
+                            });
+                            setLeaveBalances({ casualTotal: leaveForm.casualTotal, sickTotal: leaveForm.sickTotal });
+                            setIsEditingLeaves(false);
+                          } catch (err) {
+                            console.error(err);
+                            alert('Failed to save leave balances');
+                          }
                         }}
                         className="bg-primary text-primary-foreground px-4 py-2 rounded-lg text-sm font-medium hover:bg-primary/90 transition-colors"
                       >
@@ -875,8 +894,8 @@ export function EmployeeProfile() {
                     <button 
                       onClick={() => {
                         setLeaveForm({ 
-                          casualTotal, casualTaken, casualRemaining: casualTotal - casualTaken,
-                          sickTotal, sickTaken, sickRemaining: sickTotal - sickTaken
+                          casualTotal: leaveBalances.casualTotal,
+                          sickTotal: leaveBalances.sickTotal
                         });
                         setIsEditingLeaves(true);
                       }}
@@ -899,15 +918,15 @@ export function EmployeeProfile() {
                   {isEditingLeaves ? (
                     <div className="grid grid-cols-3 text-center gap-2">
                       <div>
-                        <input type="number" className="w-16 text-center border border-blue-200 rounded-md text-xl font-bold text-blue-900 bg-white shadow-inner" value={leaveForm.casualTotal} onChange={(e) => handleLeaveFormChange('casual', 'total', parseInt(e.target.value) || 0)} />
+                        <input type="number" className="w-16 text-center border border-blue-200 rounded-md text-xl font-bold text-blue-900 bg-white shadow-inner" value={leaveForm.casualTotal} onChange={(e) => handleLeaveFormChange('casual', parseInt(e.target.value) || 0)} />
                         <div className="text-xs text-blue-600 mt-1">Total</div>
                       </div>
                       <div>
-                        <input type="number" className="w-16 text-center border border-blue-200 rounded-md text-xl font-bold text-red-600 bg-white shadow-inner" value={leaveForm.casualTaken} onChange={(e) => handleLeaveFormChange('casual', 'taken', parseInt(e.target.value) || 0)} />
+                        <div className="w-16 mx-auto text-center border border-blue-200 rounded-md text-xl font-bold text-red-600 bg-white/50 shadow-inner py-1 opacity-75">{casualTaken}</div>
                         <div className="text-xs text-blue-600 mt-1">Taken</div>
                       </div>
                       <div>
-                        <input type="number" className="w-16 text-center border border-blue-200 rounded-md text-xl font-bold text-green-600 bg-white shadow-inner" value={leaveForm.casualRemaining} onChange={(e) => handleLeaveFormChange('casual', 'remaining', parseInt(e.target.value) || 0)} />
+                        <div className="w-16 mx-auto text-center border border-blue-200 rounded-md text-xl font-bold text-green-600 bg-white/50 shadow-inner py-1 opacity-75">{leaveForm.casualTotal - casualTaken}</div>
                         <div className="text-xs text-blue-600 mt-1">Remaining</div>
                       </div>
                     </div>
@@ -939,15 +958,15 @@ export function EmployeeProfile() {
                   {isEditingLeaves ? (
                     <div className="grid grid-cols-3 text-center gap-2">
                       <div>
-                        <input type="number" className="w-16 text-center border border-purple-200 rounded-md text-xl font-bold text-purple-900 bg-white shadow-inner" value={leaveForm.sickTotal} onChange={(e) => handleLeaveFormChange('sick', 'total', parseInt(e.target.value) || 0)} />
+                        <input type="number" className="w-16 text-center border border-purple-200 rounded-md text-xl font-bold text-purple-900 bg-white shadow-inner" value={leaveForm.sickTotal} onChange={(e) => handleLeaveFormChange('sick', parseInt(e.target.value) || 0)} />
                         <div className="text-xs text-purple-600 mt-1">Total</div>
                       </div>
                       <div>
-                        <input type="number" className="w-16 text-center border border-purple-200 rounded-md text-xl font-bold text-red-600 bg-white shadow-inner" value={leaveForm.sickTaken} onChange={(e) => handleLeaveFormChange('sick', 'taken', parseInt(e.target.value) || 0)} />
+                        <div className="w-16 mx-auto text-center border border-purple-200 rounded-md text-xl font-bold text-red-600 bg-white/50 shadow-inner py-1 opacity-75">{sickTaken}</div>
                         <div className="text-xs text-purple-600 mt-1">Taken</div>
                       </div>
                       <div>
-                        <input type="number" className="w-16 text-center border border-purple-200 rounded-md text-xl font-bold text-green-600 bg-white shadow-inner" value={leaveForm.sickRemaining} onChange={(e) => handleLeaveFormChange('sick', 'remaining', parseInt(e.target.value) || 0)} />
+                        <div className="w-16 mx-auto text-center border border-purple-200 rounded-md text-xl font-bold text-green-600 bg-white/50 shadow-inner py-1 opacity-75">{leaveForm.sickTotal - sickTaken}</div>
                         <div className="text-xs text-purple-600 mt-1">Remaining</div>
                       </div>
                     </div>
@@ -999,8 +1018,23 @@ export function EmployeeProfile() {
                       </div>
                       {l.status === 'Pending' && (
                         <div className="flex space-x-2">
-                          <button className="p-2 bg-emerald-50 text-emerald-600 hover:bg-emerald-100 rounded-md"><Check className="w-4 h-4"/></button>
-                          <button className="p-2 bg-rose-50 text-rose-600 hover:bg-rose-100 rounded-md"><X className="w-4 h-4"/></button>
+                          <button onClick={async () => {
+                            await fetch(`http://localhost:8080/api/leaves/${l.id}/status`, {
+                              method: 'PUT',
+                              headers: { 'Content-Type': 'application/json' },
+                              body: JSON.stringify({ status: 'Approved' })
+                            });
+                            setLeaves(leaves.map(x => x.id === l.id ? { ...x, status: 'Approved' } : x));
+                          }} className="p-2 bg-emerald-50 text-emerald-600 hover:bg-emerald-100 rounded-md"><Check className="w-4 h-4"/></button>
+                          
+                          <button onClick={async () => {
+                            await fetch(`http://localhost:8080/api/leaves/${l.id}/status`, {
+                              method: 'PUT',
+                              headers: { 'Content-Type': 'application/json' },
+                              body: JSON.stringify({ status: 'Rejected' })
+                            });
+                            setLeaves(leaves.map(x => x.id === l.id ? { ...x, status: 'Rejected' } : x));
+                          }} className="p-2 bg-rose-50 text-rose-600 hover:bg-rose-100 rounded-md"><X className="w-4 h-4"/></button>
                         </div>
                       )}
                     </div>
@@ -1038,7 +1072,10 @@ export function EmployeeProfile() {
                     </div>
                     <div className="flex space-x-2 opacity-0 group-hover:opacity-100">
                       <button onClick={() => { setCurrentNotif(n); setNotifForm({title: n.title, message: n.message}); setIsNotifModalOpen(true); }} className="p-1.5 text-blue-600 hover:bg-blue-50 rounded-md h-fit"><Edit2 className="w-4 h-4"/></button>
-                      <button onClick={() => setNotifications(notifications.filter(x => x.id !== n.id))} className="p-1.5 text-rose-600 hover:bg-rose-50 rounded-md h-fit"><Trash2 className="w-4 h-4"/></button>
+                      <button onClick={async () => {
+                        await fetch(`http://localhost:8080/api/notifications/${n.id}`, { method: 'DELETE' });
+                        setNotifications(notifications.filter(x => x.id !== n.id));
+                      }} className="p-1.5 text-rose-600 hover:bg-rose-50 rounded-md h-fit"><Trash2 className="w-4 h-4"/></button>
                     </div>
                   </div>
                 ))}

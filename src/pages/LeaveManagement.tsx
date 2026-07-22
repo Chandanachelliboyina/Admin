@@ -78,14 +78,15 @@ export function LeaveManagement() {
     // Optimistic update
     setRequests(requests.map(req => req.id === id ? { ...req, status: newStatus } : req));
     
-    // In a real app, you would hit an endpoint like PUT /api/leaves/{id}/status
-    // try {
-    //   await fetch(`http://localhost:8080/api/leaves/${id}/status`, {
-    //     method: 'PUT',
-    //     headers: { 'Content-Type': 'application/json' },
-    //     body: JSON.stringify({ status: newStatus })
-    //   });
-    // } catch (err) { ... }
+    try {
+      await fetch(`http://localhost:8080/api/leaves/${id}/status`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status: newStatus })
+      });
+    } catch (err) {
+      console.error('Failed to update status', err);
+    }
     
     // Refresh to get actual counters
     setTimeout(fetchLeaves, 1000);
