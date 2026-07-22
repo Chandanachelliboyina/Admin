@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { Pencil, Trash2, Plus, Search, X } from 'lucide-react';
+import { Plus, Search, X } from 'lucide-react';
 
 type Employee = {
   id: string;

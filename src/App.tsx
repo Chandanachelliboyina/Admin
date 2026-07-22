@@ -1,5 +1,4 @@
-import React, { useState } from 'react';
-import { BrowserRouter, Routes, Route, Navigate, useNavigate } from 'react-router-dom';
+import { BrowserRouter, Routes, Route } from 'react-router-dom';
 import { Layout } from './components/layout/Layout';
 import { DashboardHome } from './pages/DashboardHome';
 import { EmployeeManagement } from './pages/EmployeeManagement';

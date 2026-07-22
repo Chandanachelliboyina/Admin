@@ -161,35 +161,9 @@ export function EmployeeProfile() {
   const sickTotal = 12;
   const sickTaken = (leaves || []).filter(l => (l.type || '').includes('Sick') && l.status === 'Approved').length;
 
-  const handleLeaveStatus = (id: number, status: 'Approved' | 'Rejected') => {
-    setLeaves(leaves.map(l => {
-      if (l.id === id) {
-        if (status === 'Approved' && l.status === 'Pending') {
-           let days = 0;
-           let currentDate = new Date(l.startDate);
-           let endDate = new Date(l.endDate);
-           
-           // Iterate through each day and count if it's not a Sunday (0)
-           while (currentDate <= endDate) {
-             if (currentDate.getDay() !== 0) {
-               days++;
-             }
-             currentDate.setDate(currentDate.getDate() + 1);
-           }
-           
-           // Logic to update state would go here
-        }
-        return { ...l, status };
-      }
-      return l;
-    }));
-  };
 
-  const handleRemoveAttachment = (id: number) => {
-    if (confirm('Are you sure you want to remove this attachment?')) {
-      setLeaves(leaves.map(l => l.id === id ? { ...l, attachmentDeleted: true } : l));
-    }
-  };
+
+
 
   const [isUpdateModalOpen, setIsUpdateModalOpen] = useState(false);
   const [updateForm, setUpdateForm] = useState({ imageUrl: '', description: '' });
@@ -207,11 +181,7 @@ export function EmployeeProfile() {
     setUpdateForm({ imageUrl: '', description: '' });
   };
 
-  const handleRemoveUpdateImage = (id: number) => {
-    if (confirm('Are you sure you want to delete this image?')) {
-      setUpdates(updates.map(u => u.id === id ? { ...u, imageDeleted: true } : u));
-    }
-  };
+
 
   // Notifications State
   const [notifications, setNotifications] = useState([
@@ -305,12 +275,7 @@ export function EmployeeProfile() {
     }
   };
 
-  const handleEditUpdate = (id: number) => {
-    const newDesc = window.prompt('Enter new description for this update:');
-    if (newDesc !== null) {
-      setUpdates(updates.map(u => u.id === id ? { ...u, description: newDesc } : u));
-    }
-  };
+
 
   const handleDeleteActivity = (id: number) => {
     if (window.confirm('Are you sure you want to delete this activity?')) {
@@ -318,12 +283,7 @@ export function EmployeeProfile() {
     }
   };
 
-  const handleEditActivity = (id: number) => {
-    const newDesc = window.prompt('Enter updated activity details:');
-    if (newDesc !== null) {
-      setActivities(activities.map(a => a.id === id ? { ...a, description: newDesc } : a));
-    }
-  };
+
 
   const filteredActivities = (activities || []).filter(a => 
     (a.description || '').toLowerCase().includes((activitySearch || '').toLowerCase())
@@ -858,7 +818,7 @@ export function EmployeeProfile() {
                   <div className="py-8 text-center text-muted-foreground border border-dashed border-border rounded-lg bg-muted/20">
                     No activities found.
                   </div>
-                ) : filteredActivities.map((activity, index) => (
+                ) : filteredActivities.map((activity) => (
                   <div key={activity.id} className="relative pl-8">
                     {/* Timeline dot */}
                     <div className="absolute left-[3px] top-1.5 w-2 h-2 rounded-full bg-primary ring-4 ring-background z-10"></div>
