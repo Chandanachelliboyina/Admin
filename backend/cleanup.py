@@ -1,10 +1,17 @@
 import os
 from datetime import datetime, timedelta
 from pymongo import MongoClient
+import os
+from dotenv import load_dotenv
 
-# MongoDB connection strings (from your app.py)
-MAIN_DB_URI = "mongodb+srv://chanduchelliboyina3_db_user:TQAgn6iQQf7GfHrb@cluster0.ena8z6v.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0"
-PREV_EMP_DB_URI = "mongodb+srv://chanduchelliboyina3_db_user:wWp8HDSftQ3ZmGhT@cluster0.owpohu3.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0"
+load_dotenv()
+
+# MongoDB connection strings (loaded from environment variables)
+MAIN_DB_URI = os.getenv("MONGODB_URL")
+PREV_EMP_DB_URI = os.getenv("PREVIOUS_MONGODB_URL")
+
+if not MAIN_DB_URI or not PREV_EMP_DB_URI:
+    raise ValueError("Missing database connection strings in environment variables")
 
 def run_cleanup():
     print("Connecting to databases...")
