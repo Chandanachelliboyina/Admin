@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { Plus, Search, X } from 'lucide-react';
+import { API_BASE_URL } from '../config';
 
 type Employee = {
   id: string;
@@ -26,7 +27,7 @@ export function EmployeeManagement() {
     setIsLoading(true);
     setError(null);
     try {
-      const response = await fetch('http://localhost:8080/api/employees', {
+      const response = await fetch(`${API_BASE_URL}/api/employees`, {
         signal: AbortSignal.timeout(30000)
       });
       if (!response.ok) throw new Error('Failed to fetch employees');
@@ -64,7 +65,7 @@ export function EmployeeManagement() {
   const handleDelete = async (id: string) => {
     if (window.confirm(`Are you sure you want to remove employee ${id}?`)) {
       try {
-        const response = await fetch(`http://localhost:8080/api/employees/${id}`, {
+        const response = await fetch(`${API_BASE_URL}/api/employees/${id}`, {
           method: 'DELETE',
         });
         if (!response.ok) throw new Error('Failed to delete employee');
@@ -94,7 +95,7 @@ export function EmployeeManagement() {
     };
 
     try {
-      const response = await fetch('http://localhost:8080/api/employees', {
+      const response = await fetch(`${API_BASE_URL}/api/employees`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
@@ -128,7 +129,7 @@ export function EmployeeManagement() {
     };
 
     try {
-      const response = await fetch(`http://localhost:8080/api/employees/${editingEmployee.id}`, {
+      const response = await fetch(`${API_BASE_URL}/api/employees/${editingEmployee.id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),

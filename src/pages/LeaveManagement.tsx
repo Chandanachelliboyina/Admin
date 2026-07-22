@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Check, X, CalendarRange, HeartPulse, Clock, Info, Loader2 } from 'lucide-react';
+import { API_BASE_URL } from '../config';
 
 interface LeaveRequest {
   id: string;
@@ -20,7 +21,7 @@ export function LeaveManagement() {
 
   const fetchLeaves = async () => {
     try {
-      const res = await fetch('http://localhost:8080/api/leaves');
+      const res = await fetch(`${API_BASE_URL}/api/leaves`);
       if (res.ok) {
         const data = await res.json();
         
@@ -79,7 +80,7 @@ export function LeaveManagement() {
     setRequests(requests.map(req => req.id === id ? { ...req, status: newStatus } : req));
     
     try {
-      await fetch(`http://localhost:8080/api/leaves/${id}/status`, {
+      await fetch(`${API_BASE_URL}/api/leaves/${id}/status`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ status: newStatus })

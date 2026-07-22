@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { ArrowLeft, User, Mail, Phone, MapPin, Briefcase, Calendar, Info, Map, Building, Edit2, Save, X, Download, Printer, Image as ImageIcon, Activity, Trash2, Search, CalendarRange, Bell, Plus, Check } from 'lucide-react';
+import { API_BASE_URL } from '../config';
 
 export function EmployeeProfile() {
   const { id } = useParams();
@@ -21,14 +22,14 @@ export function EmployeeProfile() {
       try {
         const TIMEOUT = 15000;
         const [empResponse, attResponse, updResponse, actResponse, leaveResponse, workInfoRes, leaveBalRes, notifRes] = await Promise.all([
-          fetch(`http://localhost:8080/api/employees/${id}`, { signal: AbortSignal.timeout(TIMEOUT) }),
-          fetch(`http://localhost:8080/api/employees/${id}/attendance`, { signal: AbortSignal.timeout(TIMEOUT) }),
-          fetch(`http://localhost:8080/api/employees/${id}/updates`, { signal: AbortSignal.timeout(TIMEOUT) }),
-          fetch(`http://localhost:8080/api/employees/${id}/activities`, { signal: AbortSignal.timeout(TIMEOUT) }),
-          fetch(`http://localhost:8080/api/employees/${id}/leaves`, { signal: AbortSignal.timeout(TIMEOUT) }),
-          fetch(`http://localhost:8080/api/employees/${id}/work-info`, { signal: AbortSignal.timeout(TIMEOUT) }),
-          fetch(`http://localhost:8080/api/employees/${id}/leave-balances`, { signal: AbortSignal.timeout(TIMEOUT) }),
-          fetch(`http://localhost:8080/api/notifications`, { signal: AbortSignal.timeout(TIMEOUT) })
+          fetch(`${API_BASE_URL}/api/employees/${id}`, { signal: AbortSignal.timeout(TIMEOUT) }),
+          fetch(`${API_BASE_URL}/api/employees/${id}/attendance`, { signal: AbortSignal.timeout(TIMEOUT) }),
+          fetch(`${API_BASE_URL}/api/employees/${id}/updates`, { signal: AbortSignal.timeout(TIMEOUT) }),
+          fetch(`${API_BASE_URL}/api/employees/${id}/activities`, { signal: AbortSignal.timeout(TIMEOUT) }),
+          fetch(`${API_BASE_URL}/api/employees/${id}/leaves`, { signal: AbortSignal.timeout(TIMEOUT) }),
+          fetch(`${API_BASE_URL}/api/employees/${id}/work-info`, { signal: AbortSignal.timeout(TIMEOUT) }),
+          fetch(`${API_BASE_URL}/api/employees/${id}/leave-balances`, { signal: AbortSignal.timeout(TIMEOUT) }),
+          fetch(`${API_BASE_URL}/api/notifications`, { signal: AbortSignal.timeout(TIMEOUT) })
         ]);
         
         if (!empResponse.ok) {
@@ -92,7 +93,7 @@ export function EmployeeProfile() {
       reader.onloadend = async () => {
         const base64String = reader.result as string;
         
-        const response = await fetch(`http://localhost:8080/api/employees/${id}/profile-picture`, {
+        const response = await fetch(`${API_BASE_URL}/api/employees/${id}/profile-picture`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ image_b64: base64String }),
@@ -157,13 +158,13 @@ export function EmployeeProfile() {
   const handleSaveUpdate = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
-      const res = await fetch(`http://localhost:8080/api/employees/${id}/updates`, {
+      const res = await fetch(`${API_BASE_URL}/api/employees/${id}/updates`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(updateForm)
       });
       if (res.ok) {
-        const updResponse = await fetch(`http://localhost:8080/api/employees/${id}/updates`);
+        const updResponse = await fetch(`${API_BASE_URL}/api/employees/${id}/updates`);
         if (updResponse.ok) setUpdates(await updResponse.json());
       }
       setIsUpdateModalOpen(false);
@@ -185,19 +186,19 @@ export function EmployeeProfile() {
     e.preventDefault();
     try {
       if (currentNotif) {
-        await fetch(`http://localhost:8080/api/notifications/${currentNotif.id}`, {
+        await fetch(`${API_BASE_URL}/api/notifications/${currentNotif.id}`, {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(notifForm)
         });
       } else {
-        await fetch(`http://localhost:8080/api/notifications`, {
+        await fetch(`${API_BASE_URL}/api/notifications`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(notifForm)
         });
       }
-      const notifRes = await fetch(`http://localhost:8080/api/notifications`);
+      const notifRes = await fetch(`${API_BASE_URL}/api/notifications`);
       if (notifRes.ok) setNotifications(await notifRes.json());
       setIsNotifModalOpen(false);
     } catch (err) { console.error(err); }
@@ -241,7 +242,7 @@ export function EmployeeProfile() {
   const handleWorkSave = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
-      await fetch(`http://localhost:8080/api/employees/${id}/work-info`, {
+      await fetch(`${API_BASE_URL}/api/employees/${id}/work-info`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(workInfo)
@@ -282,7 +283,7 @@ export function EmployeeProfile() {
 
   const handleDeleteUpdate = async (updateId: string) => {
     if (window.confirm('Are you sure you want to delete this daily update?')) {
-      await fetch(`http://localhost:8080/api/employees/${id}/updates/${updateId}`, { method: 'DELETE' });
+      await fetch(`${API_BASE_URL}/api/employees/${id}/updates/${updateId}`, { method: 'DELETE' });
       setUpdates(updates.filter(u => u.id !== updateId));
     }
   };
@@ -291,7 +292,7 @@ export function EmployeeProfile() {
 
   const handleDeleteActivity = async (activityId: string) => {
     if (window.confirm('Are you sure you want to delete this activity?')) {
-      await fetch(`http://localhost:8080/api/employees/${id}/activities/${activityId}`, { method: 'DELETE' });
+      await fetch(`${API_BASE_URL}/api/employees/${id}/activities/${activityId}`, { method: 'DELETE' });
       setActivities(activities.filter(a => a.id !== activityId));
     }
   };
@@ -867,7 +868,7 @@ export function EmployeeProfile() {
                                 casualTotal: leaveForm.casualTotal, casualTaken: casualTaken, casualRemaining: leaveForm.casualTotal - casualTaken,
                                 sickTotal: leaveForm.sickTotal, sickTaken: sickTaken, sickRemaining: leaveForm.sickTotal - sickTaken
                             };
-                            await fetch(`http://localhost:8080/api/employees/${id}/leave-balances`, {
+                            await fetch(`${API_BASE_URL}/api/employees/${id}/leave-balances`, {
                                 method: 'PUT',
                                 headers: { 'Content-Type': 'application/json' },
                                 body: JSON.stringify(newBalances)
@@ -1019,7 +1020,7 @@ export function EmployeeProfile() {
                       {l.status === 'Pending' && (
                         <div className="flex space-x-2">
                           <button onClick={async () => {
-                            await fetch(`http://localhost:8080/api/leaves/${l.id}/status`, {
+                            await fetch(`${API_BASE_URL}/api/leaves/${l.id}/status`, {
                               method: 'PUT',
                               headers: { 'Content-Type': 'application/json' },
                               body: JSON.stringify({ status: 'Approved' })
@@ -1028,7 +1029,7 @@ export function EmployeeProfile() {
                           }} className="p-2 bg-emerald-50 text-emerald-600 hover:bg-emerald-100 rounded-md"><Check className="w-4 h-4"/></button>
                           
                           <button onClick={async () => {
-                            await fetch(`http://localhost:8080/api/leaves/${l.id}/status`, {
+                            await fetch(`${API_BASE_URL}/api/leaves/${l.id}/status`, {
                               method: 'PUT',
                               headers: { 'Content-Type': 'application/json' },
                               body: JSON.stringify({ status: 'Rejected' })
@@ -1073,7 +1074,7 @@ export function EmployeeProfile() {
                     <div className="flex space-x-2 opacity-0 group-hover:opacity-100">
                       <button onClick={() => { setCurrentNotif(n); setNotifForm({title: n.title, message: n.message}); setIsNotifModalOpen(true); }} className="p-1.5 text-blue-600 hover:bg-blue-50 rounded-md h-fit"><Edit2 className="w-4 h-4"/></button>
                       <button onClick={async () => {
-                        await fetch(`http://localhost:8080/api/notifications/${n.id}`, { method: 'DELETE' });
+                        await fetch(`${API_BASE_URL}/api/notifications/${n.id}`, { method: 'DELETE' });
                         setNotifications(notifications.filter(x => x.id !== n.id));
                       }} className="p-1.5 text-rose-600 hover:bg-rose-50 rounded-md h-fit"><Trash2 className="w-4 h-4"/></button>
                     </div>

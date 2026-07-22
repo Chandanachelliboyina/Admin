@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Search, ArrowRight, Users, UserCheck, Map, Activity, Clock, Loader2 } from 'lucide-react';
+import { API_BASE_URL } from '../config';
 
 interface ActivityLog {
   action: string;
@@ -23,11 +24,11 @@ export function DashboardHome() {
 
   const fetchActivities = async () => {
     try {
-      const res = await fetch('http://localhost:8080/api/activities');
+      const res = await fetch(`${API_BASE_URL}/api/activities`);
       if (res.ok) {
         setActivities(await res.json());
       }
-      const statsRes = await fetch('http://localhost:8080/api/dashboard/stats');
+      const statsRes = await fetch(`${API_BASE_URL}/api/dashboard/stats`);
       if (statsRes.ok) {
         setStats(await statsRes.json());
       }

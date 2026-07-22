@@ -3,6 +3,7 @@ import { MapContainer, TileLayer, Marker, Popup } from 'react-leaflet';
 import 'leaflet/dist/leaflet.css';
 import { Clock, MapPin, Search, Loader2 } from 'lucide-react';
 import L from 'leaflet';
+import { API_BASE_URL } from '../config';
 
 // Fix Leaflet's default icon path issues with Webpack/Vite
 delete (L.Icon.Default.prototype as any)._getIconUrl;
@@ -36,7 +37,7 @@ export function AttendanceTracking() {
 
   const fetchAttendance = async () => {
     try {
-      const res = await fetch('http://localhost:8080/api/attendance');
+      const res = await fetch(`${API_BASE_URL}/api/attendance`);
       if (res.ok) {
         const data = await res.json();
         setRecords(data);
