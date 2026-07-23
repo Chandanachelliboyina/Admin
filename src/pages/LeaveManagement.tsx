@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Check, X, CalendarRange, HeartPulse, Clock, Info, Loader2 } from 'lucide-react';
+import { Check, X, CalendarRange, HeartPulse, Clock, Info, Loader2, Send, BellRing } from 'lucide-react';
 import { API_BASE_URL } from '../config';
 
 interface LeaveRequest {
@@ -19,6 +19,14 @@ export function LeaveManagement() {
   const [isLoading, setIsLoading] = useState(true);
   const [casualLeaveCount, setCasualLeaveCount] = useState(0);
   const [sickLeaveCount, setSickLeaveCount] = useState(0);
+
+  // Notification State
+  const [notificationTitle, setNotificationTitle] = useState('');
+  const [notificationMessage, setNotificationMessage] = useState('');
+  const [notificationTargetType, setNotificationTargetType] = useState('all');
+  const [notificationEmployeeId, setNotificationEmployeeId] = useState('');
+  const [isSendingNotif, setIsSendingNotif] = useState(false);
+  const [notifSuccess, setNotifSuccess] = useState('');
 
   const fetchLeaves = async () => {
     try {
@@ -94,6 +102,39 @@ export function LeaveManagement() {
     setTimeout(fetchLeaves, 1000);
   };
 
+  const handleSendNotification = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!notificationTitle || !notificationMessage) return;
+    setIsSendingNotif(true);
+    setNotifSuccess('');
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/notifications`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          title: notificationTitle,
+          message: notificationMessage,
+          target_type: notificationTargetType,
+          employee_id: notificationTargetType === 'individual' ? notificationEmployeeId : null
+        })
+      });
+      if (res.ok) {
+        setNotifSuccess('Notification successfully sent and saved to MongoDB!');
+        setNotificationTitle('');
+        setNotificationMessage('');
+        setNotificationEmployeeId('');
+      } else {
+        setNotifSuccess('Failed to send notification.');
+      }
+    } catch (err) {
+      console.error(err);
+      setNotifSuccess('An error occurred while sending.');
+    } finally {
+      setIsSendingNotif(false);
+      setTimeout(() => setNotifSuccess(''), 4000);
+    }
+  };
+
   if (isLoading) {
     return (
       <div className="flex justify-center items-center h-64">
@@ -140,6 +181,86 @@ export function LeaveManagement() {
           <div className="text-3xl font-bold text-foreground mt-1">{sickLeaveCount}</div>
           <p className="text-xs text-muted-foreground mt-2">Cumulative total for all employees</p>
         </div>
+      </div>
+
+      {/* Broadcast/Individual Notification Form */}
+      <div className="bg-card border border-border rounded-2xl shadow-sm p-6 relative overflow-hidden">
+        <div className="absolute top-0 right-0 p-4 opacity-5 pointer-events-none">
+          <BellRing className="w-32 h-32" />
+        </div>
+        <div className="flex items-center space-x-2 mb-6">
+          <div className="p-2 bg-primary/10 rounded-lg">
+            <BellRing className="w-5 h-5 text-primary" />
+          </div>
+          <h2 className="text-xl font-bold text-foreground">Send Notification</h2>
+        </div>
+        
+        <form onSubmit={handleSendNotification} className="space-y-4 relative z-10">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="space-y-2">
+              <label className="text-sm font-medium text-foreground">Target Audience</label>
+              <select 
+                value={notificationTargetType}
+                onChange={(e) => setNotificationTargetType(e.target.value)}
+                className="w-full p-2.5 bg-background border border-input rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary"
+              >
+                <option value="all">All Employees (Broadcast)</option>
+                <option value="individual">Individual Employee</option>
+              </select>
+            </div>
+            {notificationTargetType === 'individual' && (
+              <div className="space-y-2 animate-in fade-in slide-in-from-left-4">
+                <label className="text-sm font-medium text-foreground">Employee ID</label>
+                <input 
+                  type="text" 
+                  value={notificationEmployeeId}
+                  onChange={(e) => setNotificationEmployeeId(e.target.value)}
+                  placeholder="e.g. EMP001"
+                  required={notificationTargetType === 'individual'}
+                  className="w-full p-2.5 bg-background border border-input rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary"
+                />
+              </div>
+            )}
+          </div>
+          
+          <div className="space-y-2">
+            <label className="text-sm font-medium text-foreground">Notification Title</label>
+            <input 
+              type="text" 
+              value={notificationTitle}
+              onChange={(e) => setNotificationTitle(e.target.value)}
+              placeholder="e.g. Urgent Meeting, Leave Approved"
+              required
+              className="w-full p-2.5 bg-background border border-input rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary"
+            />
+          </div>
+          
+          <div className="space-y-2">
+            <label className="text-sm font-medium text-foreground">Message</label>
+            <textarea 
+              value={notificationMessage}
+              onChange={(e) => setNotificationMessage(e.target.value)}
+              placeholder="Type your notification message here..."
+              required
+              rows={3}
+              className="w-full p-2.5 bg-background border border-input rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary resize-none"
+            />
+          </div>
+
+          <div className="flex items-center justify-between pt-2">
+            <p className={`text-sm font-medium transition-opacity duration-300 ${notifSuccess ? 'opacity-100 text-emerald-600' : 'opacity-0'}`}>
+              {notifSuccess}
+            </p>
+            <button 
+              type="submit" 
+              disabled={isSendingNotif}
+              className="px-6 py-2.5 bg-primary text-primary-foreground rounded-lg font-medium flex items-center space-x-2 hover:bg-primary/90 transition-colors disabled:opacity-70 disabled:cursor-not-allowed"
+            >
+              {isSendingNotif ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
+              <span>{isSendingNotif ? 'Sending...' : 'Send Notification'}</span>
+            </button>
+          </div>
+        </form>
       </div>
 
       <div className="bg-card border border-border rounded-2xl shadow-sm overflow-hidden">

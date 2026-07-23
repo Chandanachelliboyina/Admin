@@ -50,6 +50,8 @@ class Employee(BaseModel):
 class NotificationBase(BaseModel):
     title: str
     message: str
+    target_type: str = "all"  # "all" or "individual"
+    employee_id: Optional[str] = None
 
 class Notification(NotificationBase):
     id: str
@@ -855,6 +857,8 @@ async def get_notifications(include_deleted: bool = False):
             "id": str(doc["_id"]),
             "title": doc.get("title", ""),
             "message": doc.get("message", ""),
+            "target_type": doc.get("target_type", "all"),
+            "employee_id": doc.get("employee_id"),
             "date": created.strftime("%b %d, %Y, %I:%M %p") if isinstance(created, datetime) else str(created)[:16],
             "isDeleted": doc.get("isDeleted", False)
         })
@@ -867,6 +871,8 @@ async def create_notification(notif: NotificationBase):
     doc = {
         "title": notif.title,
         "message": notif.message,
+        "target_type": notif.target_type,
+        "employee_id": notif.employee_id,
         "created_at": datetime.now(),
         "isDeleted": False
     }
@@ -882,7 +888,12 @@ async def update_notification(notif_id: str, notif: NotificationBase):
     from bson.objectid import ObjectId
     await db.notifications.update_one(
         {"_id": ObjectId(notif_id)},
-        {"$set": {"title": notif.title, "message": notif.message}}
+        {"$set": {
+            "title": notif.title, 
+            "message": notif.message,
+            "target_type": notif.target_type,
+            "employee_id": notif.employee_id
+        }}
     )
     return {"message": "Notification updated"}
 
