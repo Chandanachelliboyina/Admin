@@ -20,7 +20,7 @@ export function EmployeeProfile() {
   useEffect(() => {
     const fetchEmployee = async () => {
       try {
-        const TIMEOUT = 15000;
+        const TIMEOUT = 30000;
         const [empResponse, attResponse, updResponse, actResponse, leaveResponse, workInfoRes, leaveBalRes, notifRes] = await Promise.all([
           fetch(`${API_BASE_URL}/api/employees/${id}`, { signal: AbortSignal.timeout(TIMEOUT) }),
           fetch(`${API_BASE_URL}/api/employees/${id}/attendance`, { signal: AbortSignal.timeout(TIMEOUT) }),
