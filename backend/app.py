@@ -879,10 +879,14 @@ async def create_notification(notif: NotificationBase):
         "isDeleted": False
     }
     result = await db.notifications.insert_one(doc)
-    doc["id"] = str(result.inserted_id)
-    doc.pop("_id", None)
-    doc["date"] = doc["created_at"].strftime("%b %d, %Y, %I:%M %p")
-    return doc
+    return {
+        "id": str(result.inserted_id),
+        "title": doc["title"],
+        "message": doc["message"],
+        "target_type": doc["target_type"],
+        "employee_id": doc["employee_id"],
+        "date": doc["created_at"].strftime("%b %d, %Y, %I:%M %p")
+    }
 
 @app.put("/api/notifications/{notif_id}")
 async def update_notification(notif_id: str, notif: NotificationBase):

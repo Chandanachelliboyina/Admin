@@ -305,22 +305,26 @@ export function LeaveManagement() {
                   )}
                 </div>
                 <div className="flex space-x-3 shrink-0 pt-2">
-                  <button
-                    onClick={() => handleStatusUpdate(request.id, 'Approved')}
-                    className="flex items-center space-x-1 px-4 py-2 bg-emerald-50 text-emerald-600 hover:bg-emerald-100 hover:text-emerald-700 rounded-lg transition-colors font-medium text-sm"
-                    title="Approve"
-                  >
-                    <Check className="w-4 h-4" />
-                    <span>Approve</span>
-                  </button>
-                  <button
-                    onClick={() => handleStatusUpdate(request.id, 'Rejected')}
-                    className="flex items-center space-x-1 px-4 py-2 bg-rose-50 text-rose-600 hover:bg-rose-100 hover:text-rose-700 rounded-lg transition-colors font-medium text-sm"
-                    title="Reject"
-                  >
-                    <X className="w-4 h-4" />
-                    <span>Reject</span>
-                  </button>
+                  {request.status === 'Pending' && (
+                    <>
+                      <button
+                        onClick={() => handleStatusUpdate(request.id, 'Approved')}
+                        className="flex items-center space-x-1 px-4 py-2 bg-emerald-50 text-emerald-600 hover:bg-emerald-100 hover:text-emerald-700 rounded-lg transition-colors font-medium text-sm"
+                        title="Approve"
+                      >
+                        <Check className="w-4 h-4" />
+                        <span>Approve</span>
+                      </button>
+                      <button
+                        onClick={() => handleStatusUpdate(request.id, 'Rejected')}
+                        className="flex items-center space-x-1 px-4 py-2 bg-rose-50 text-rose-600 hover:bg-rose-100 hover:text-rose-700 rounded-lg transition-colors font-medium text-sm"
+                        title="Reject"
+                      >
+                        <X className="w-4 h-4" />
+                        <span>Reject</span>
+                      </button>
+                    </>
+                  )}
                 </div>
               </div>
             </div>
