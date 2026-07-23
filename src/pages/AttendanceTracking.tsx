@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { MapContainer, TileLayer, Marker, Popup } from 'react-leaflet';
 import 'leaflet/dist/leaflet.css';
-import { Clock, MapPin, Search, Loader2 } from 'lucide-react';
+import { Clock, MapPin, Search, Loader2, X } from 'lucide-react';
 import L from 'leaflet';
 import { API_BASE_URL } from '../config';
 
@@ -83,8 +83,9 @@ export function AttendanceTracking() {
         {isLoading && <Loader2 className="w-5 h-5 animate-spin text-primary" />}
       </div>
 
-      <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
-        <div className="xl:col-span-2 space-y-4">
+      <div className="space-y-6 relative">
+        {/* Main Table Area */}
+        <div className="space-y-6">
           <div className="bg-card rounded-lg border border-border overflow-hidden shadow-sm">
             <div className="p-4 border-b border-border flex items-center justify-between bg-muted/20">
               <div className="relative w-72">
@@ -182,68 +183,86 @@ export function AttendanceTracking() {
             </div>
           </div>
         </div>
+      </div>
 
-        {/* Location Sidebar */}
-        <div className="xl:col-span-1">
-          <div className="bg-card rounded-lg border border-border shadow-sm p-4 sticky top-6">
-            <h3 className="text-lg font-semibold mb-4 flex items-center border-b border-border pb-3">
-              <MapPin className="w-5 h-5 mr-2 text-primary" /> Location Details
-            </h3>
+      {/* Location Modal */}
+      {selectedRecord && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-background/80 backdrop-blur-sm">
+          <div className="bg-card rounded-xl border border-border shadow-xl w-full max-w-2xl overflow-hidden animate-in zoom-in-95 fade-in duration-200">
+            <div className="flex items-center justify-between p-4 border-b border-border bg-muted/30">
+              <h3 className="text-lg font-semibold flex items-center">
+                <MapPin className="w-5 h-5 mr-2 text-primary" /> 
+                Location Details: {selectedRecord.empName}
+              </h3>
+              <button 
+                onClick={() => setSelectedRecord(null)}
+                className="p-1 rounded-md hover:bg-muted text-muted-foreground hover:text-foreground transition-colors"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
             
-            {!selectedRecord ? (
-              <div className="text-center py-12 text-muted-foreground bg-muted/30 rounded-lg border border-dashed border-border">
-                Select an attendance record to view location data.
-              </div>
-            ) : selectedRecord.loginLoc || selectedRecord.logoutLoc ? (
-              <div className="space-y-4 animate-in fade-in">
-                <div className="h-64 rounded-lg overflow-hidden border border-border relative z-0">
-                  <MapContainer 
-                    center={selectedRecord.loginLoc ? [selectedRecord.loginLoc.lat, selectedRecord.loginLoc.lng] : [selectedRecord.logoutLoc!.lat, selectedRecord.logoutLoc!.lng]} 
-                    zoom={13} 
-                    style={{ height: '100%', width: '100%' }}
-                    key={`map-${selectedRecord.id}`} // Force re-render when selection changes
-                  >
-                    <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
+            <div className="p-4">
+              {selectedRecord.loginLoc || selectedRecord.logoutLoc ? (
+                <div className="space-y-4">
+                  <div className="h-72 rounded-lg overflow-hidden border border-border relative z-0">
+                    <MapContainer 
+                      center={selectedRecord.loginLoc ? [selectedRecord.loginLoc.lat, selectedRecord.loginLoc.lng] : [selectedRecord.logoutLoc!.lat, selectedRecord.logoutLoc!.lng]} 
+                      zoom={13} 
+                      style={{ height: '100%', width: '100%' }}
+                      key={`map-${selectedRecord.id}`} // Force re-render when selection changes
+                    >
+                      <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
+                      {selectedRecord.loginLoc && (
+                        <Marker position={[selectedRecord.loginLoc.lat, selectedRecord.loginLoc.lng]}>
+                          <Popup>Login: {selectedRecord.loginLoc.address}</Popup>
+                        </Marker>
+                      )}
+                      {selectedRecord.logoutLoc && (
+                        <Marker position={[selectedRecord.logoutLoc.lat, selectedRecord.logoutLoc.lng]}>
+                          <Popup>Logout: {selectedRecord.logoutLoc.address}</Popup>
+                        </Marker>
+                      )}
+                    </MapContainer>
+                  </div>
+                  
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2">
                     {selectedRecord.loginLoc && (
-                      <Marker position={[selectedRecord.loginLoc.lat, selectedRecord.loginLoc.lng]}>
-                        <Popup>Login: {selectedRecord.loginLoc.address}</Popup>
-                      </Marker>
-                    )}
-                    {selectedRecord.logoutLoc && (
-                      <Marker position={[selectedRecord.logoutLoc.lat, selectedRecord.logoutLoc.lng]}>
-                        <Popup>Logout: {selectedRecord.logoutLoc.address}</Popup>
-                      </Marker>
-                    )}
-                  </MapContainer>
-                </div>
-                
-                <div className="space-y-3 pt-2">
-                  {selectedRecord.loginLoc && (
-                    <div className="bg-emerald-50/50 p-3 rounded-lg border border-emerald-100">
-                      <div className="flex items-center text-xs font-bold text-emerald-700 uppercase tracking-wider mb-1">
-                        <div className="w-2 h-2 rounded-full bg-emerald-500 mr-2"></div>
-                        Login Location
+                      <div className="bg-emerald-50/50 p-4 rounded-lg border border-emerald-100">
+                        <div className="flex items-center text-xs font-bold text-emerald-700 uppercase tracking-wider mb-2">
+                          <div className="w-2 h-2 rounded-full bg-emerald-500 mr-2"></div>
+                          Login Location
+                        </div>
+                        <div className="text-sm text-foreground ml-4 leading-relaxed">{selectedRecord.loginLoc.address}</div>
                       </div>
-                      <div className="text-sm text-foreground ml-4 leading-relaxed">{selectedRecord.loginLoc.address}</div>
+                    )}
+                    <div className="bg-rose-50/50 p-4 rounded-lg border border-rose-100 h-full">
+                      <div className="flex items-center text-xs font-bold text-rose-700 uppercase tracking-wider mb-2">
+                        <div className="w-2 h-2 rounded-full bg-rose-500 mr-2"></div>
+                        Logout Location
+                      </div>
+                      <div className="text-sm text-foreground ml-4 leading-relaxed">{selectedRecord.logoutLoc?.address || 'Not checked out yet'}</div>
                     </div>
-                  )}
-                  <div className="bg-rose-50/50 p-3 rounded-lg border border-rose-100">
-                    <div className="flex items-center text-xs font-bold text-rose-700 uppercase tracking-wider mb-1">
-                      <div className="w-2 h-2 rounded-full bg-rose-500 mr-2"></div>
-                      Logout Location
-                    </div>
-                    <div className="text-sm text-foreground ml-4 leading-relaxed">{selectedRecord.logoutLoc?.address || 'Not checked out yet'}</div>
                   </div>
                 </div>
-              </div>
-            ) : (
-              <div className="text-center py-12 text-muted-foreground bg-muted/30 rounded-lg border border-dashed border-border">
-                No GPS coordinates available for {selectedRecord.empName} today.
-              </div>
-            )}
+              ) : (
+                <div className="text-center py-12 text-muted-foreground bg-muted/30 rounded-lg border border-dashed border-border">
+                  No GPS coordinates available for {selectedRecord.empName} today.
+                </div>
+              )}
+            </div>
+            
+            <div className="p-4 border-t border-border bg-muted/30 flex justify-end">
+              <button
+                onClick={() => setSelectedRecord(null)}
+                className="px-4 py-2 bg-secondary text-secondary-foreground hover:bg-secondary/80 rounded-md text-sm font-medium transition-colors"
+              >
+                Close
+              </button>
+            </div>
           </div>
         </div>
-      </div>
+      )}
     </div>
   );
 }
