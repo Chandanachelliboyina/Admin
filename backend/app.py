@@ -774,10 +774,12 @@ async def update_leave_status(leave_id: str, status_update: LeaveStatusUpdate):
     db = get_previous_db()
     if db is None: return {"message": "Mock mode"}
     from bson.objectid import ObjectId
-    await db.leaves.update_one(
-        {"_id": ObjectId(leave_id)},
-        {"$set": {"status": status_update.status}}
-    )
+    try:
+        query = {"_id": ObjectId(leave_id)}
+    except Exception:
+        query = {"_id": leave_id}
+        
+    await db.leaves.update_one(query, {"$set": {"status": status_update.status}})
     return {"message": "Leave status updated"}
 
 # ─── Daily Updates & Activities Mutations ─────────────────────
@@ -878,6 +880,7 @@ async def create_notification(notif: NotificationBase):
     }
     result = await db.notifications.insert_one(doc)
     doc["id"] = str(result.inserted_id)
+    doc.pop("_id", None)
     doc["date"] = doc["created_at"].strftime("%b %d, %Y, %I:%M %p")
     return doc
 
