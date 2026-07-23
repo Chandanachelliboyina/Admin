@@ -83,15 +83,15 @@ export function EmployeeManagement() {
     
     const payload = {
       id,
-      name: newEmployee.name || 'Unknown',
-      position: newEmployee.role || 'N/A',
-      department: newEmployee.department || 'N/A',
-      email: 'N/A',
-      mobileNumber: newEmployee.phone || 'N/A',
-      gender: 'N/A',
-      dateOfBirth: 'N/A',
+      name: newEmployee.name || '',
+      position: newEmployee.role || '',
+      department: newEmployee.department || '',
+      email: '',
+      mobileNumber: newEmployee.phone || '',
+      gender: '',
+      dateOfBirth: '',
       joiningDate: new Date().toISOString().split('T')[0],
-      address: newEmployee.location || 'N/A',
+      address: newEmployee.location || '',
     };
 
     try {

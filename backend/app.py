@@ -62,23 +62,7 @@ class OTPRequest(BaseModel):
     otp: str
 
 # ─── In-Memory Fallback ───────────────────────────────────────
-mock_employees = {
-    "EMP001": Employee(
-        id="EMP001",
-        name="Venkatesh Rao",
-        position="Field Coordinator",
-        email="venkatesh.r@bmm.org",
-        mobileNumber="+91 98765 43210",
-        gender="Male",
-        dateOfBirth="1990-05-15",
-        joiningDate="2024-01-10",
-        address="123 Gandhi Road, Village A, Mandal HQ",
-        village="Village A",
-        mandal="Mandal HQ",
-    )
-}
 
-mock_notifications = []
 
 # ─── Helper: map a MongoDB employee doc to the API schema ─────
 def _map_employee(doc: dict, fallback_id: str = "") -> dict:
@@ -162,7 +146,7 @@ async def get_all_employees():
     """Fetch all employees from MongoDB."""
     db = get_previous_db()
     if db is None:
-        return list(mock_employees.values())
+        return []
 
     employees = []
     cursor = db.employees.find({})
@@ -180,9 +164,7 @@ async def get_employee(employee_id: str):
     """Fetch a single employee by ID from MongoDB."""
     db = get_previous_db()
     if db is None:
-        if employee_id not in mock_employees:
-            raise HTTPException(status_code=404, detail="Employee not found")
-        return mock_employees[employee_id]
+        raise HTTPException(status_code=500, detail="Database connection not active")
 
     clean_id = employee_id.strip()
     doc = None
@@ -220,8 +202,7 @@ async def get_employee(employee_id: str):
 async def create_employee(employee: Employee):
     db = get_previous_db()
     if db is None:
-        mock_employees[employee.id] = employee
-        return {"message": "Employee added successfully (mock)", "id": employee.id}
+        raise HTTPException(status_code=500, detail="Database connection not active")
         
     doc = employee.model_dump()
     doc["employee_id"] = doc.pop("id", "")
@@ -239,10 +220,7 @@ async def create_employee(employee: Employee):
 async def update_employee(employee_id: str, employee: Employee):
     db = get_previous_db()
     if db is None:
-        if employee_id in mock_employees:
-            mock_employees[employee_id] = employee
-            return {"message": "Employee updated successfully (mock)"}
-        raise HTTPException(status_code=404, detail="Employee not found")
+        raise HTTPException(status_code=500, detail="Database connection not active")
 
     doc = employee.model_dump()
     doc["employee_id"] = doc.pop("id", "")
@@ -265,10 +243,7 @@ async def update_employee(employee_id: str, employee: Employee):
 async def delete_employee(employee_id: str):
     db = get_previous_db()
     if db is None:
-        if employee_id in mock_employees:
-            del mock_employees[employee_id]
-            return {"message": "Employee deleted successfully (mock)"}
-        raise HTTPException(status_code=404, detail="Employee not found")
+        raise HTTPException(status_code=500, detail="Database connection not active")
 
     result = await db.employees.delete_one(
         {"$or": [{"employee_id": employee_id}, {"id": employee_id}]}
@@ -622,7 +597,7 @@ async def get_dashboard_stats():
     db = get_previous_db()
     if db is None:
         return {
-            "totalEmployees": len(mock_employees),
+            "totalEmployees": 0,
             "presentToday": 0,
             "activeLocations": 1
         }
