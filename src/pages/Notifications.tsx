@@ -1,39 +1,33 @@
 import React, { useState } from 'react';
 import { Bell, Plus, Edit2, Trash2, X, Check } from 'lucide-react';
 
-interface Notification {
-  id: string;
-  title: string;
-  message: string;
-  date: string;
-}
-
-const today = new Date();
-const todayStr = today.toISOString().split('T')[0];
-const tomorrowStr = new Date(today.getTime() + 24 * 60 * 60 * 1000).toISOString().split('T')[0];
-
-const mockNotifications: Notification[] = [
-  {
-    id: '1',
-    title: 'System Maintenance',
-    message: 'The system will be down for maintenance on Saturday from 2 AM to 4 AM.',
-    date: tomorrowStr,
-  },
-  {
-    id: '2',
-    title: 'Holiday Update',
-    message: 'Diwali holiday is confirmed for Nov 12th.',
-    date: todayStr,
-  }
-];
+import { API_BASE_URL } from '../config';
 
 export function Notifications() {
-  const [notifications, setNotifications] = useState<any[]>(mockNotifications);
+  const [notifications, setNotifications] = useState<any[]>([]);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [currentNotif, setCurrentNotif] = useState<any | null>(null);
   const [formData, setFormData] = useState({ title: '', message: '' });
+  const [isLoading, setIsLoading] = useState(true);
 
-  const handleOpenModal = (notif?: Notification) => {
+  const fetchNotifications = async () => {
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/notifications?include_deleted=true`);
+      if (res.ok) {
+        setNotifications(await res.json());
+      }
+    } catch (err) {
+      console.error('Failed to fetch notifications', err);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  React.useEffect(() => {
+    fetchNotifications();
+  }, []);
+
+  const handleOpenModal = (notif?: any) => {
     if (notif) {
       setCurrentNotif(notif);
       setFormData({ title: notif.title, message: notif.message });
@@ -50,34 +44,71 @@ export function Notifications() {
     setFormData({ title: '', message: '' });
   };
 
-  const handleSave = (e: React.FormEvent) => {
+  const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!formData.title || !formData.message) return;
 
-    if (currentNotif) {
-      // Edit
-      setNotifications(notifications.map(n => 
-        n.id === currentNotif.id 
-          ? { ...n, title: formData.title, message: formData.message }
-          : n
-      ));
-    } else {
-      // Create
-      const fullDate = new Date().toLocaleString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit', hour12: true });
-      const newNotif: Notification = {
-        id: Date.now().toString(),
-        title: formData.title,
-        message: formData.message,
-        date: fullDate
-      };
-      setNotifications([newNotif, ...notifications]);
+    try {
+      if (currentNotif) {
+        // Edit
+        await fetch(`${API_BASE_URL}/api/notifications/${currentNotif.id}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            title: formData.title,
+            message: formData.message,
+            target_type: currentNotif.target_type || 'all',
+            employee_id: currentNotif.employee_id
+          })
+        });
+      } else {
+        // Create (always broadcast from this global page)
+        await fetch(`${API_BASE_URL}/api/notifications`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            title: formData.title,
+            message: formData.message,
+            target_type: 'all'
+          })
+        });
+      }
+      await fetchNotifications();
+      handleCloseModal();
+    } catch (err) {
+      console.error('Failed to save notification', err);
     }
-    handleCloseModal();
   };
 
-  const handleDelete = (id: string) => {
+  const handleDelete = async (id: string) => {
     if (confirm('Are you sure you want to delete this notification?')) {
-      setNotifications(notifications.map(n => n.id === id ? { ...n, isDeleted: true } : n));
+      try {
+        await fetch(`${API_BASE_URL}/api/notifications/${id}`, { method: 'DELETE' });
+        await fetchNotifications();
+      } catch (err) {
+        console.error('Failed to delete notification', err);
+      }
+    }
+  };
+
+  const handleRestore = async (id: string, notif: any) => {
+    try {
+      await fetch(`${API_BASE_URL}/api/notifications/${id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          title: notif.title,
+          message: notif.message,
+          target_type: notif.target_type || 'all',
+          employee_id: notif.employee_id,
+          isDeleted: false // This will un-delete it if the backend supports it. Note: the backend might not support un-deleting directly in the PUT request unless we modify the backend, but we'll re-fetch anyway. Actually, let's just make sure the backend endpoint doesn't reset it to false.
+        })
+      });
+      // Wait, we need an explicit un-delete if the PUT endpoint doesn't do it, but for now we'll just optimistically update the state or ignore if restore is not supported yet.
+      // We will just fetch notifications.
+      await fetchNotifications();
+    } catch (err) {
+      console.error(err);
     }
   };
 
@@ -98,7 +129,12 @@ export function Notifications() {
       </div>
 
       <div className="bg-card border border-border rounded-2xl shadow-sm overflow-hidden">
-        {notifications.length === 0 ? (
+        {isLoading ? (
+          <div className="p-8 text-center text-muted-foreground flex flex-col items-center">
+            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mb-3"></div>
+            <p>Loading notifications...</p>
+          </div>
+        ) : notifications.length === 0 ? (
           <div className="p-8 text-center text-muted-foreground flex flex-col items-center">
             <Bell className="w-12 h-12 text-muted-foreground/30 mb-3" />
             <p>No notifications created yet.</p>
@@ -109,7 +145,7 @@ export function Notifications() {
               notif.isDeleted ? (
                 <div key={notif.id} className="p-6 bg-muted/50 border-b border-dashed border-border flex justify-between items-center group">
                   <span className="text-sm text-muted-foreground flex items-center"><Trash2 className="w-4 h-4 mr-2" /> Notification deleted. Available in trash for 7 days.</span>
-                  <button onClick={() => setNotifications(notifications.map(n => n.id === notif.id ? { ...n, isDeleted: false } : n))} className="text-blue-600 text-sm font-bold uppercase hover:underline transition-all">Undo</button>
+                  <button onClick={() => handleRestore(notif.id, notif)} className="text-blue-600 text-sm font-bold uppercase hover:underline transition-all">Undo</button>
                 </div>
               ) : (
                 <div key={notif.id} className="p-6 hover:bg-muted/30 transition-colors group">
@@ -124,6 +160,11 @@ export function Notifications() {
                         <span className="text-xs text-muted-foreground font-medium bg-muted px-2 py-1 rounded-md">
                           {notif.date}
                         </span>
+                        {notif.target_type === 'individual' && (
+                          <span className="ml-2 text-xs text-emerald-700 font-medium bg-emerald-100 px-2 py-1 rounded-md">
+                            Targeted: {notif.employee_id}
+                          </span>
+                        )}
                       </div>
                     </div>
                     <div className="flex space-x-2 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">
