@@ -58,9 +58,19 @@ export function AttendanceTracking() {
     return () => clearInterval(timer);
   }, []);
 
+  const getTodayIST = () => {
+    const d = new Date();
+    d.setMinutes(d.getMinutes() + d.getTimezoneOffset() + 330); // IST is +5:30
+    return d.toISOString().split('T')[0];
+  };
+  
+  const todayStr = getTodayIST();
+  
   const filteredRecords = records.filter(record => 
-    record.empName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    record.empId.toLowerCase().includes(searchTerm.toLowerCase())
+    record.date === todayStr && 
+    record.checkIn !== 'N/A' &&
+    (record.empName.toLowerCase().includes(searchTerm.toLowerCase()) ||
+     record.empId.toLowerCase().includes(searchTerm.toLowerCase()))
   );
 
   return (
@@ -88,7 +98,7 @@ export function AttendanceTracking() {
                 />
               </div>
               <span className="text-xs font-medium bg-primary/10 text-primary px-3 py-1 rounded-full border border-primary/20">
-                Live Feed
+                Today's Sign-Ins
               </span>
             </div>
             
@@ -106,7 +116,7 @@ export function AttendanceTracking() {
                   {filteredRecords.length === 0 && !isLoading && (
                     <tr>
                       <td colSpan={4} className="px-6 py-8 text-center text-muted-foreground">
-                        No attendance records found.
+                        No sign-ins for today.
                       </td>
                     </tr>
                   )}
@@ -154,8 +164,15 @@ export function AttendanceTracking() {
                         )}
                       </td>
                       <td className="px-6 py-4 text-right">
-                        <button className="text-primary hover:underline font-medium text-xs">
-                          View Details
+                        <button 
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setSelectedRecord(record);
+                          }}
+                          className="flex items-center justify-end w-full space-x-1 text-primary hover:text-primary/80 font-medium text-xs"
+                        >
+                          <MapPin className="w-4 h-4" />
+                          <span>Location</span>
                         </button>
                       </td>
                     </tr>

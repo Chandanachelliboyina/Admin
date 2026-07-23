@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { ArrowLeft, User, Mail, Phone, MapPin, Briefcase, Calendar, Info, Map, Building, Edit2, Save, X, Download, Printer, Image as ImageIcon, Activity, Trash2, Search, CalendarRange, Bell, Plus, Check } from 'lucide-react';
+import { ArrowLeft, User, Mail, Phone, MapPin, Briefcase, Calendar, Info, Map, Building, Edit2, X, Download, Printer, Image as ImageIcon, Activity, Trash2, Search, CalendarRange, Bell, Plus, Check } from 'lucide-react';
 import { API_BASE_URL } from '../config';
 
 export function EmployeeProfile() {
@@ -114,7 +114,6 @@ export function EmployeeProfile() {
   };
   
   // Work Info State
-  const [isEditingWork, setIsEditingWork] = useState(false);
   const [workInfo, setWorkInfo] = useState({
     head: '',
     donorName: '',
@@ -239,20 +238,6 @@ export function EmployeeProfile() {
     return parseInt(rowYear) === parseInt(year) && parseInt(rowMonth) === targetMonth;
   });
 
-  const handleWorkSave = async (e: React.FormEvent) => {
-    e.preventDefault();
-    try {
-      await fetch(`${API_BASE_URL}/api/employees/${id}/work-info`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(workInfo)
-      });
-      setIsEditingWork(false);
-    } catch (err) {
-      console.error(err);
-      alert('Failed to save work info');
-    }
-  };
 
   const handleExportCSV = () => {
     const headers = ['Date', 'Employee Name', 'Employee ID', 'Check In', 'Check Out', 'Hours', 'Status', 'Start Location', 'End Location'];
@@ -513,19 +498,8 @@ export function EmployeeProfile() {
                   <Building className="w-5 h-5 mr-2 text-muted-foreground" />
                   Work Information
                 </h2>
-                {!isEditingWork && (
-                  <button 
-                    onClick={() => setIsEditingWork(true)}
-                    className="flex items-center space-x-2 text-sm font-medium bg-secondary text-secondary-foreground hover:bg-secondary/80 px-3 py-1.5 rounded-md transition-colors"
-                  >
-                    <Edit2 className="w-4 h-4" />
-                    <span>Edit</span>
-                  </button>
-                )}
               </div>
-              
-              {!isEditingWork ? (
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-y-6 gap-x-8 animate-in fade-in">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-y-6 gap-x-8 animate-in fade-in pt-4">
                   <div>
                     <label className="text-sm text-muted-foreground block mb-1">Head</label>
                     <div className="font-medium">{workInfo.head}</div>
@@ -548,88 +522,11 @@ export function EmployeeProfile() {
                   </div>
                   <div className="md:col-span-2">
                     <label className="text-sm text-muted-foreground block mb-1">Targets</label>
-                    <div className="font-medium bg-muted/50 p-3 rounded-md border border-border">
+                    <div className="font-medium bg-muted/50 p-3 rounded-md border border-border whitespace-pre-wrap">
                       {workInfo.targets}
                     </div>
                   </div>
                 </div>
-              ) : (
-                <form onSubmit={handleWorkSave} className="space-y-6 animate-in fade-in">
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                    <div className="space-y-2">
-                      <label className="text-sm font-medium text-foreground">Head</label>
-                      <input
-                        type="text"
-                        value={workInfo.head}
-                        onChange={(e) => setWorkInfo({ ...workInfo, head: e.target.value })}
-                        className="w-full px-3 py-2 bg-background border border-input rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-primary"
-                      />
-                    </div>
-                    <div className="space-y-2">
-                      <label className="text-sm font-medium text-foreground">Donor Name</label>
-                      <input
-                        type="text"
-                        value={workInfo.donorName}
-                        onChange={(e) => setWorkInfo({ ...workInfo, donorName: e.target.value })}
-                        className="w-full px-3 py-2 bg-background border border-input rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-primary"
-                      />
-                    </div>
-                    <div className="space-y-2">
-                      <label className="text-sm font-medium text-foreground">Department</label>
-                      <input
-                        type="text"
-                        value={workInfo.department}
-                        onChange={(e) => setWorkInfo({ ...workInfo, department: e.target.value })}
-                        className="w-full px-3 py-2 bg-background border border-input rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-primary"
-                      />
-                    </div>
-                    <div className="space-y-2">
-                      <label className="text-sm font-medium text-foreground">Target Villages</label>
-                      <input
-                        type="text"
-                        value={workInfo.targetVillages}
-                        onChange={(e) => setWorkInfo({ ...workInfo, targetVillages: e.target.value })}
-                        className="w-full px-3 py-2 bg-background border border-input rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-primary"
-                      />
-                    </div>
-                    <div className="space-y-2">
-                      <label className="text-sm font-medium text-foreground">Target Mandal</label>
-                      <input
-                        type="text"
-                        value={workInfo.targetMandal}
-                        onChange={(e) => setWorkInfo({ ...workInfo, targetMandal: e.target.value })}
-                        className="w-full px-3 py-2 bg-background border border-input rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-primary"
-                      />
-                    </div>
-                    <div className="space-y-2 md:col-span-2">
-                      <label className="text-sm font-medium text-foreground">Targets</label>
-                      <textarea
-                        value={workInfo.targets}
-                        onChange={(e) => setWorkInfo({ ...workInfo, targets: e.target.value })}
-                        rows={3}
-                        className="w-full px-3 py-2 bg-background border border-input rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-primary resize-none"
-                      />
-                    </div>
-                  </div>
-                  <div className="flex justify-end space-x-3 pt-4 border-t border-border">
-                    <button
-                      type="button"
-                      onClick={() => setIsEditingWork(false)}
-                      className="flex items-center space-x-2 px-4 py-2 rounded-md border border-input hover:bg-muted transition-colors text-sm font-medium"
-                    >
-                      <X className="w-4 h-4" />
-                      <span>Cancel</span>
-                    </button>
-                    <button
-                      type="submit"
-                      className="flex items-center space-x-2 px-4 py-2 rounded-md bg-primary text-primary-foreground hover:bg-primary/90 transition-colors text-sm font-medium"
-                    >
-                      <Save className="w-4 h-4" />
-                      <span>Save Changes</span>
-                    </button>
-                  </div>
-                </form>
-              )}
             </div>
           )}
 
@@ -646,19 +543,19 @@ export function EmployeeProfile() {
                     onChange={(e) => setSelectedMonth(e.target.value)}
                     className="bg-background border border-input text-sm rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-primary"
                   >
-                    <option>All Months</option>
-                    <option>December 2026</option>
-                    <option>November 2026</option>
-                    <option>October 2026</option>
-                    <option>September 2026</option>
-                    <option>August 2026</option>
-                    <option>July 2026</option>
-                    <option>June 2026</option>
-                    <option>May 2026</option>
-                    <option>April 2026</option>
-                    <option>March 2026</option>
-                    <option>February 2026</option>
-                    <option>January 2026</option>
+                    <option value="All Months">All Months</option>
+                    <option value="December 2026">December</option>
+                    <option value="November 2026">November</option>
+                    <option value="October 2026">October</option>
+                    <option value="September 2026">September</option>
+                    <option value="August 2026">August</option>
+                    <option value="July 2026">July</option>
+                    <option value="June 2026">June</option>
+                    <option value="May 2026">May</option>
+                    <option value="April 2026">April</option>
+                    <option value="March 2026">March</option>
+                    <option value="February 2026">February</option>
+                    <option value="January 2026">January</option>
                   </select>
                   <button 
                     onClick={handleExportCSV}
@@ -811,10 +708,9 @@ export function EmployeeProfile() {
                 <div className="relative w-full sm:w-64">
                   <Search className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
                   <input
-                    type="text"
+                    type="date"
                     value={activitySearch}
                     onChange={(e) => setActivitySearch(e.target.value)}
-                    placeholder="Search date, month, year..."
                     className="w-full pl-9 pr-4 py-2 bg-background border border-input rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-primary"
                   />
                 </div>
@@ -840,7 +736,17 @@ export function EmployeeProfile() {
                           <Trash2 className="w-4 h-4" />
                         </button>
                       </div>
-                      <p className="text-sm text-foreground leading-relaxed">{activity.description}</p>
+                      <div className="text-sm text-foreground leading-relaxed whitespace-pre-wrap">
+                        {(activity.description || '').split('\n').map((line: string, idx: number, arr: string[]) => {
+                          const isHeading = line.trim() !== '' && (idx === 0 || arr[idx - 1].trim() === '');
+                          return (
+                            <React.Fragment key={idx}>
+                              {isHeading ? <span className="font-bold">{line}</span> : line}
+                              {idx < arr.length - 1 && '\n'}
+                            </React.Fragment>
+                          );
+                        })}
+                      </div>
                     </div>
                   </div>
                 ))}
@@ -1009,36 +915,35 @@ export function EmployeeProfile() {
                         </div>
                         <p className="text-sm text-muted-foreground mt-1"><Calendar className="w-3 h-3 inline mr-1"/>{l.startDate} to {l.endDate}</p>
                         <p className="text-sm mt-2 text-foreground"><span className="font-medium">Reason:</span> {l.reason}</p>
+                        
                         {l.attachment && (
                           <div className="mt-4">
-                            <span className="text-sm font-medium text-foreground block mb-2">Attachment (Medical Certificate):</span>
+                            <span className="text-sm font-medium text-foreground block mb-2">Medical Certificate:</span>
                             <div className="relative group inline-block">
                               <img src={l.attachment} alt="Medical Certificate" className="h-32 w-48 object-cover rounded-md border border-border shadow-sm transition-transform duration-300 group-hover:scale-105" />
                             </div>
                           </div>
                         )}
                       </div>
-                      {l.status === 'Pending' && (
-                        <div className="flex space-x-2">
-                          <button onClick={async () => {
-                            await fetch(`${API_BASE_URL}/api/leaves/${l.id}/status`, {
-                              method: 'PUT',
-                              headers: { 'Content-Type': 'application/json' },
-                              body: JSON.stringify({ status: 'Approved' })
-                            });
-                            setLeaves(leaves.map(x => x.id === l.id ? { ...x, status: 'Approved' } : x));
-                          }} className="p-2 bg-emerald-50 text-emerald-600 hover:bg-emerald-100 rounded-md"><Check className="w-4 h-4"/></button>
-                          
-                          <button onClick={async () => {
-                            await fetch(`${API_BASE_URL}/api/leaves/${l.id}/status`, {
-                              method: 'PUT',
-                              headers: { 'Content-Type': 'application/json' },
-                              body: JSON.stringify({ status: 'Rejected' })
-                            });
-                            setLeaves(leaves.map(x => x.id === l.id ? { ...x, status: 'Rejected' } : x));
-                          }} className="p-2 bg-rose-50 text-rose-600 hover:bg-rose-100 rounded-md"><X className="w-4 h-4"/></button>
-                        </div>
-                      )}
+                      <div className="flex space-x-2">
+                        <button onClick={async () => {
+                          await fetch(`${API_BASE_URL}/api/leaves/${l.id}/status`, {
+                            method: 'PUT',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ status: 'Approved' })
+                          });
+                          setLeaves(leaves.map(x => x.id === l.id ? { ...x, status: 'Approved' } : x));
+                        }} className="p-2 bg-emerald-50 text-emerald-600 hover:bg-emerald-100 rounded-md" title="Approve"><Check className="w-4 h-4"/></button>
+                        
+                        <button onClick={async () => {
+                          await fetch(`${API_BASE_URL}/api/leaves/${l.id}/status`, {
+                            method: 'PUT',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ status: 'Rejected' })
+                          });
+                          setLeaves(leaves.map(x => x.id === l.id ? { ...x, status: 'Rejected' } : x));
+                        }} className="p-2 bg-rose-50 text-rose-600 hover:bg-rose-100 rounded-md" title="Reject"><X className="w-4 h-4"/></button>
+                      </div>
                     </div>
                   </div>
                 ))}

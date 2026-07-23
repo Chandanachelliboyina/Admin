@@ -232,16 +232,16 @@ export function EmployeeManagement() {
                           setIsEditModalOpen(true);
                         }}
                         className="text-blue-600 hover:bg-blue-50 px-3 py-1.5 rounded-md transition-colors text-sm font-medium border border-transparent hover:border-blue-200" 
-                        title="Edit"
+                        title="Remove Access"
                       >
-                        Edit
+                        Remove Access
                       </button>
                       <button 
                         onClick={() => handleDelete(emp.id)}
                         className="text-red-600 hover:bg-red-50 px-3 py-1.5 rounded-md transition-colors text-sm font-medium border border-red-200 bg-red-50/50" 
-                        title="Remove Access"
+                        title="Delete Employee"
                       >
-                        Remove
+                        Delete
                       </button>
                     </td>
                   </tr>

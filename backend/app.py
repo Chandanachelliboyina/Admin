@@ -98,11 +98,11 @@ def _map_employee(doc: dict, fallback_id: str = "") -> dict:
         "name":           doc.get("full_name") or doc.get("name") or "Unknown Name",
         "position":       position_str,
         "email":          doc.get("email") or "N/A",
-        "mobileNumber":   doc.get("phone") or doc.get("mobileNumber") or "N/A",
+        "mobileNumber":   doc.get("mobile_number") or doc.get("phone") or doc.get("mobileNumber") or "N/A",
         "gender":         doc.get("gender") or "N/A",
         "dateOfBirth":    doc.get("date_of_birth") or doc.get("dateOfBirth") or "N/A",
         "joiningDate":    doc.get("joining_date") or doc.get("joiningDate") or "N/A",
-        "address":        doc.get("address") or doc.get("location") or "N/A",
+        "address":        doc.get("office_location") or doc.get("address") or doc.get("location") or "N/A",
         "village":        doc.get("village") or "N/A",
         "mandal":         doc.get("mandal") or "N/A",
         "district":       doc.get("district") or "N/A",
@@ -309,6 +309,46 @@ async def upload_profile_picture(employee_id: str, payload: ProfilePictureUpload
 
 
 # ─── Attendance ───────────────────────────────────────────────
+from datetime import timezone, timedelta
+
+def parse_time_and_calc_hrs(login_str, logout_str):
+    check_in_time = "N/A"
+    check_out_time = "N/A"
+    hrs_worked = "N/A"
+    fmt = "%I:%M %p"
+    dt_in = None
+    dt_out = None
+    
+    # IST is UTC+5:30
+    ist_tz = timezone(timedelta(hours=5, minutes=30))
+
+    try:
+        if login_str and str(login_str).lower() != "none" and login_str != "N/A":
+            dt_in = datetime.fromisoformat(str(login_str).replace('Z', '+00:00'))
+            check_in_time = dt_in.astimezone(ist_tz).strftime(fmt)
+    except:
+        check_in_time = str(login_str)
+
+    try:
+        if logout_str and str(logout_str).lower() != "none" and logout_str != "N/A":
+            dt_out = datetime.fromisoformat(str(logout_str).replace('Z', '+00:00'))
+            check_out_time = dt_out.astimezone(ist_tz).strftime(fmt)
+    except:
+        check_out_time = str(logout_str)
+
+    if dt_in and dt_out:
+        # Calculate exact duration
+        diff = dt_out - dt_in
+        total_seconds = diff.total_seconds()
+        
+        # Format as Xh Ym
+        hours = int(total_seconds // 3600)
+        minutes = int((total_seconds % 3600) // 60)
+        hrs_worked = f"{hours}h {minutes}m"
+
+    return check_in_time, check_out_time, hrs_worked
+
+
 @app.get("/api/employees/{employee_id}/attendance")
 async def get_employee_attendance(employee_id: str):
     """Fetch attendance records from the 'attendance' collection."""
@@ -324,15 +364,30 @@ async def get_employee_attendance(employee_id: str):
     cursor = db.attendance.find({"$or": [{"employee_id": regex_id}, {"empId": regex_id}]}).sort("date", -1).limit(90)
     records = []
     async for att in cursor:
-        check_out = att.get("logout_time")
-        if not check_out or str(check_out).lower() == "none":
-            check_out = "N/A"
+        login_val = att.get("login_time", "N/A")
+        logout_val = att.get("logout_time", "N/A")
+        
+        check_in_time, check_out_time, hrs_worked = parse_time_and_calc_hrs(login_val, logout_val)
+        
+        # fallback to db hrs if we couldn't calculate it
+        if hrs_worked == "N/A":
+            hrs_worked = att.get("hrs", "N/A")
+            
+        if check_in_time != "N/A" and check_out_time != "N/A":
+            status_val = "Present"
+        elif check_in_time != "N/A" and check_out_time == "N/A":
+            status_val = "Check-in (Absent)"
+        elif check_in_time == "N/A" and check_out_time != "N/A":
+            status_val = "Check-out (Absent)"
+        else:
+            status_val = "Absent"
+
         records.append({
             "date":     att.get("login_date", att.get("date", "N/A")),
-            "status":   att.get("attendance_status", "Present"),
-            "checkIn":  att.get("login_time", "N/A"),
-            "checkOut": check_out,
-            "hrs":      att.get("hrs", "N/A"),
+            "status":   status_val,
+            "checkIn":  check_in_time,
+            "checkOut": check_out_time,
+            "hrs":      hrs_worked,
             "start":    att.get("full_address", att.get("start", "N/A")),
             "end":      att.get("logout_full_address", att.get("end", "N/A")),
         })
@@ -382,7 +437,7 @@ async def get_employee_activities(employee_id: str):
             "id":          str(doc["_id"]),
             "date":        date_str or str(doc.get("time", ""))[:10],
             "title":       doc.get("title", doc.get("type", "Activity").capitalize()),
-            "description": doc.get("description", doc.get("notes", doc.get("action", ""))),
+            "description": doc.get("description", doc.get("notes", doc.get("remarks", doc.get("action", "")))),
         })
     return activities
 
@@ -409,6 +464,7 @@ async def get_employee_leaves(employee_id: str):
             "endDate":   str(doc.get("end_date",   doc.get("leave_date", date_str)))[:10],
             "reason":    doc.get("reason", ""),
             "status":    doc.get("status", "Pending"),
+            "attachment": doc.get("image_b64", doc.get("attachment", "")),
         })
     return leaves
 
@@ -424,9 +480,13 @@ async def get_all_attendance():
     cursor = db.attendance.find({}).sort("date", -1).limit(200)
     records = []
     async for att in cursor:
-        check_out = att.get("logout_time")
-        if not check_out or str(check_out).lower() == "none":
-            check_out = "N/A"
+        login_val = att.get("login_time", "N/A")
+        logout_val = att.get("logout_time", "N/A")
+        
+        check_in_time, check_out_time, hrs_worked = parse_time_and_calc_hrs(login_val, logout_val)
+        
+        if hrs_worked == "N/A":
+            hrs_worked = att.get("hrs", "N/A")
             
         emp_id = att.get("employee_id", "Unknown")
         emp_name = att.get("employee_name", att.get("full_name", "Unknown"))
@@ -437,28 +497,37 @@ async def get_all_attendance():
             if emp_doc:
                 emp_name = emp_doc.get("full_name", emp_doc.get("name", "Unknown"))
                 
+        if check_in_time != "N/A" and check_out_time != "N/A":
+            status_val = "Present"
+        elif check_in_time != "N/A" and check_out_time == "N/A":
+            status_val = "Check-in (Absent)"
+        elif check_in_time == "N/A" and check_out_time != "N/A":
+            status_val = "Check-out (Absent)"
+        else:
+            status_val = "Absent"
+
         records.append({
             "id":       str(att.get("_id", "")),
             "empId":    emp_id,
             "empName":  emp_name,
             "date":     att.get("login_date", att.get("date", "N/A")),
-            "status":   att.get("attendance_status", "Present"),
-            "checkIn":  att.get("login_time", "N/A"),
-            "checkOut": check_out,
-            "hrs":      att.get("hrs", "N/A"),
+            "status":   status_val,
+            "checkIn":  check_in_time,
+            "checkOut": check_out_time,
+            "hrs":      hrs_worked,
             "startLoc": att.get("full_address", att.get("start", "N/A")),
             "endLoc":   att.get("logout_full_address", att.get("end", "N/A")),
-            "selfie":   att.get("login_selfie", ""),
+            "selfie":   att.get("selfie_b64", att.get("login_selfie", "")),
             "loginLoc": {
-                "lat": att.get("login_lat"),
-                "lng": att.get("login_lng"),
+                "lat": float(att.get("gps_latitude") or 0),
+                "lng": float(att.get("gps_longitude") or 0),
                 "address": att.get("full_address")
-            } if att.get("login_lat") else None,
+            } if att.get("gps_latitude") else None,
             "logoutLoc": {
-                "lat": att.get("logout_lat"),
-                "lng": att.get("logout_lng"),
+                "lat": float(att.get("logout_gps_latitude") or 0),
+                "lng": float(att.get("logout_gps_longitude") or 0),
                 "address": att.get("logout_full_address")
-            } if att.get("logout_lat") else None,
+            } if att.get("logout_gps_latitude") else None,
         })
     return records
 
@@ -473,20 +542,30 @@ async def get_all_activities():
     
     logs = []
     
+    # Pre-fetch employee names to map IDs to Names
+    employees_cursor = db.employees.find({}, {"employee_id": 1, "id": 1, "name": 1})
+    emp_map = {}
+    async for emp in employees_cursor:
+        eid = emp.get("employee_id") or emp.get("id")
+        if eid:
+            emp_map[str(eid)] = emp.get("name", str(eid))
+            
+
     # Get recent attendance check-ins
     att_cursor = db.attendance.find({}).sort("login_date", -1).limit(20)
     async for att in att_cursor:
         emp_id = att.get("employee_id", "Unknown")
+        emp_name = emp_map.get(str(emp_id), emp_id)
         time_str = att.get("login_time", "N/A")
         date_str = att.get("login_date", "N/A")
         logs.append({
-            "action": f"{emp_id} checked in",
+            "action": f"{emp_name} checked in",
             "time": f"{date_str} {time_str}",
             "type": "attendance"
         })
         if att.get("logout_time") and str(att.get("logout_time")).lower() != "none":
             logs.append({
-                "action": f"{emp_id} checked out",
+                "action": f"{emp_name} checked out",
                 "time": f"{date_str} {att.get('logout_time')}",
                 "type": "attendance"
             })
@@ -497,9 +576,10 @@ async def get_all_activities():
         created = act.get("created_at", "")
         date_str = created.strftime("%Y-%m-%d %H:%M") if isinstance(created, datetime) else str(created)[:16]
         emp_id = act.get("employee_id", "Unknown")
+        emp_name = emp_map.get(str(emp_id), emp_id)
         title = act.get("title", "Updated Activity")
         logs.append({
-            "action": f"{emp_id} - {title}",
+            "action": f"{emp_name} - {title}",
             "time": date_str,
             "type": "system"
         })
@@ -510,10 +590,11 @@ async def get_all_activities():
         created = lv.get("created_at", "")
         date_str = created.strftime("%Y-%m-%d %H:%M") if isinstance(created, datetime) else str(created)[:16]
         emp_id = lv.get("employee_id", "Unknown")
+        emp_name = emp_map.get(str(emp_id), emp_id)
         type_str = lv.get("leave_type", "Leave")
         status = lv.get("status", "Pending")
         logs.append({
-            "action": f"{emp_id} applied for {type_str} ({status})",
+            "action": f"{emp_name} applied for {type_str} ({status})",
             "time": date_str,
             "type": "leave"
         })
@@ -524,8 +605,9 @@ async def get_all_activities():
         created = upd.get("created_at", "")
         date_str = created.strftime("%Y-%m-%d %H:%M") if isinstance(created, datetime) else str(created)[:16]
         emp_id = upd.get("employee_id", "Unknown")
+        emp_name = emp_map.get(str(emp_id), emp_id)
         logs.append({
-            "action": f"{emp_id} posted a daily update",
+            "action": f"{emp_name} posted a daily update",
             "time": date_str,
             "type": "update"
         })
@@ -593,6 +675,7 @@ async def get_all_leaves():
             "endDate":      str(doc.get("end_date",   doc.get("leave_date", date_str)))[:10],
             "reason":       doc.get("reason", ""),
             "status":       doc.get("status", "Pending"),
+            "attachment":   doc.get("image_b64", doc.get("attachment", "")),
         })
     return leaves
 
@@ -610,8 +693,30 @@ class WorkInfo(BaseModel):
 async def get_work_info(employee_id: str):
     db = get_previous_db()
     if db is None: return {}
-    doc = await db.work_info.find_one({"employee_id": employee_id}, {"_id": 0})
-    return doc if doc else {}
+    import re
+    regex_id = re.compile(f"^{re.escape(employee_id)}$", re.IGNORECASE)
+    doc = await db.work_info.find_one(
+        {"$or": [{"employee_id": regex_id}, {"empId": regex_id}, {"id": regex_id}]},
+        {"_id": 0}
+    )
+    if doc:
+        return doc
+        
+    emp_doc = await db.employees.find_one(
+        {"$or": [{"employee_id": regex_id}, {"id": regex_id}]},
+        {"_id": 0}
+    )
+    if emp_doc:
+        return {
+            "head": emp_doc.get("head", ""),
+            "donorName": emp_doc.get("donor_name", ""),
+            "department": emp_doc.get("department", ""),
+            "targetVillages": emp_doc.get("target_villages", ""),
+            "targetMandal": emp_doc.get("target_mandals", emp_doc.get("target_mandal", "")),
+            "targets": emp_doc.get("targets", "")
+        }
+        
+    return {}
 
 @app.put("/api/employees/{employee_id}/work-info")
 async def update_work_info(employee_id: str, info: WorkInfo):

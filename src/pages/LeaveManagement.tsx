@@ -11,6 +11,7 @@ interface LeaveRequest {
   endDate: string;
   reason: string;
   status: 'Pending' | 'Approved' | 'Rejected';
+  attachment?: string;
 }
 
 export function LeaveManagement() {
@@ -143,22 +144,25 @@ export function LeaveManagement() {
 
       <div className="bg-card border border-border rounded-2xl shadow-sm overflow-hidden">
         <div className="p-6 border-b border-border flex justify-between items-center">
-          <h2 className="text-xl font-bold text-foreground">Pending Leave Letters</h2>
+          <h2 className="text-xl font-bold text-foreground">All Leave Letters</h2>
           <span className="text-xs bg-primary/10 text-primary px-2 py-1 rounded-full font-medium">Live Updates</span>
         </div>
         <div className="divide-y divide-border">
-          {requests.filter(r => r.status === 'Pending').length === 0 && (
+          {requests.length === 0 && (
             <div className="p-6 text-center text-muted-foreground">
-              No pending leave requests at the moment.
+              No leave requests at the moment.
             </div>
           )}
-          {requests.filter(r => r.status === 'Pending').map((request) => (
+          {requests.map((request) => (
             <div key={request.id} className="p-6 hover:bg-muted/30 transition-colors">
               <div className="flex flex-col md:flex-row md:items-start justify-between gap-4">
                 <div className="space-y-1">
                   <div className="flex items-center space-x-2">
                     <span className="font-semibold text-foreground text-lg">{request.employeeName}</span>
                     <span className="text-sm text-muted-foreground px-2 py-0.5 bg-muted rounded-full">{request.employeeId}</span>
+                    <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${request.status === 'Pending' ? 'bg-yellow-100 text-yellow-700' : request.status === 'Approved' ? 'bg-emerald-100 text-emerald-700' : 'bg-rose-100 text-rose-700'}`}>
+                      {request.status}
+                    </span>
                   </div>
                   <div className="flex items-center space-x-2 text-sm text-muted-foreground">
                     <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${request.type?.includes('Sick') ? 'bg-rose-100 text-rose-700' : 'bg-blue-100 text-blue-700'}`}>
@@ -169,11 +173,21 @@ export function LeaveManagement() {
                   <p className="text-sm text-foreground/80 mt-2 bg-background p-3 rounded-lg border border-border">
                     <span className="font-medium">Reason:</span> {request.reason}
                   </p>
+                  
+                  {request.attachment && (
+                    <div className="mt-4">
+                      <span className="text-sm font-medium text-foreground block mb-2">Medical Certificate:</span>
+                      <div className="relative group inline-block">
+                        <img src={request.attachment} alt="Medical Certificate" className="h-32 w-48 object-cover rounded-md border border-border shadow-sm transition-transform duration-300 group-hover:scale-105" />
+                      </div>
+                    </div>
+                  )}
                 </div>
                 <div className="flex space-x-3 shrink-0 pt-2">
                   <button
                     onClick={() => handleStatusUpdate(request.id, 'Approved')}
                     className="flex items-center space-x-1 px-4 py-2 bg-emerald-50 text-emerald-600 hover:bg-emerald-100 hover:text-emerald-700 rounded-lg transition-colors font-medium text-sm"
+                    title="Approve"
                   >
                     <Check className="w-4 h-4" />
                     <span>Approve</span>
@@ -181,6 +195,7 @@ export function LeaveManagement() {
                   <button
                     onClick={() => handleStatusUpdate(request.id, 'Rejected')}
                     className="flex items-center space-x-1 px-4 py-2 bg-rose-50 text-rose-600 hover:bg-rose-100 hover:text-rose-700 rounded-lg transition-colors font-medium text-sm"
+                    title="Reject"
                   >
                     <X className="w-4 h-4" />
                     <span>Reject</span>
@@ -191,24 +206,6 @@ export function LeaveManagement() {
           ))}
         </div>
       </div>
-      
-      {requests.filter(r => r.status !== 'Pending').length > 0 && (
-        <div className="mt-8">
-          <h2 className="text-lg font-bold text-foreground mb-4">Recent History</h2>
-          <div className="bg-card border border-border rounded-2xl shadow-sm divide-y divide-border">
-            {requests.filter(r => r.status !== 'Pending').map(request => (
-              <div key={request.id} className="p-4 flex items-center justify-between text-sm">
-                <div>
-                  <span className="font-medium text-foreground">{request.employeeName}</span> requested <span className="font-medium">{request.type}</span> ({request.startDate} to {request.endDate})
-                </div>
-                <span className={`px-2 py-1 rounded-full text-xs font-medium ${request.status === 'Approved' ? 'bg-emerald-100 text-emerald-700' : 'bg-rose-100 text-rose-700'}`}>
-                  {request.status}
-                </span>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
     </div>
   );
 }
