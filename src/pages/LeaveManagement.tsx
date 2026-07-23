@@ -115,7 +115,7 @@ export function LeaveManagement() {
           title: notificationTitle,
           message: notificationMessage,
           target_type: notificationTargetType,
-          employee_id: notificationTargetType === 'individual' ? notificationEmployeeId : null
+          employee_id: notificationTargetType === 'individual' ? notificationEmployeeId.trim() : null
         })
       });
       if (res.ok) {

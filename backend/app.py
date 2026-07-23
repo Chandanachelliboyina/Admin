@@ -779,7 +779,25 @@ async def update_leave_status(leave_id: str, status_update: LeaveStatusUpdate):
     except Exception:
         query = {"_id": leave_id}
         
+    leave_doc = await db.leaves.find_one(query)
+    
     await db.leaves.update_one(query, {"$set": {"status": status_update.status}})
+    
+    # Auto-generate notification for the employee
+    if leave_doc and "employee_id" in leave_doc:
+        emp_id = leave_doc["employee_id"]
+        notif_doc = {
+            "title": f"Leave Request {status_update.status}",
+            "message": f"Your leave request has been {status_update.status.lower()}.",
+            "target_type": "individual",
+            "targetType": "individual",
+            "employee_id": emp_id,
+            "employeeId": emp_id,
+            "created_at": datetime.now(),
+            "isDeleted": False
+        }
+        await db.notifications.insert_one(notif_doc)
+        
     return {"message": "Leave status updated"}
 
 # ─── Daily Updates & Activities Mutations ─────────────────────
@@ -874,7 +892,9 @@ async def create_notification(notif: NotificationBase):
         "title": notif.title,
         "message": notif.message,
         "target_type": notif.target_type,
+        "targetType": notif.target_type,
         "employee_id": notif.employee_id,
+        "employeeId": notif.employee_id,
         "created_at": datetime.now(),
         "isDeleted": False
     }
@@ -899,7 +919,9 @@ async def update_notification(notif_id: str, notif: NotificationBase):
             "title": notif.title, 
             "message": notif.message,
             "target_type": notif.target_type,
-            "employee_id": notif.employee_id
+            "targetType": notif.target_type,
+            "employee_id": notif.employee_id,
+            "employeeId": notif.employee_id
         }}
     )
     return {"message": "Notification updated"}

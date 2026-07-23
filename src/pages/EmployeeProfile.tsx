@@ -61,7 +61,10 @@ export function EmployeeProfile() {
         }
         if (notifRes.ok) {
           const allNotifs = await notifRes.json();
-          setNotifications(allNotifs.filter((n: any) => n.target_type === 'all' || String(n.employee_id) === String(id)));
+          setNotifications(allNotifs.filter((n: any) => 
+            n.target_type === 'all' || 
+            String(n.employee_id || '').trim().toLowerCase() === String(id).trim().toLowerCase()
+          ));
         }
       } catch (err: any) {
         console.error(err);
@@ -211,7 +214,10 @@ export function EmployeeProfile() {
       const notifRes = await fetch(`${API_BASE_URL}/api/notifications`);
       if (notifRes.ok) {
         const allNotifs = await notifRes.json();
-        setNotifications(allNotifs.filter((n: any) => n.target_type === 'all' || String(n.employee_id) === String(id)));
+        setNotifications(allNotifs.filter((n: any) => 
+          n.target_type === 'all' || 
+          String(n.employee_id || '').trim().toLowerCase() === String(id).trim().toLowerCase()
+        ));
       }
       setIsNotifModalOpen(false);
     } catch (err) { console.error(err); }
