@@ -59,7 +59,10 @@ export function EmployeeProfile() {
             const lb = await leaveBalRes.json();
             setLeaveBalances({ casualTotal: lb.casualTotal, sickTotal: lb.sickTotal });
         }
-        if (notifRes.ok) setNotifications(await notifRes.json());
+        if (notifRes.ok) {
+          const allNotifs = await notifRes.json();
+          setNotifications(allNotifs.filter((n: any) => n.target_type === 'all' || String(n.employee_id) === String(id)));
+        }
       } catch (err: any) {
         console.error(err);
         if (err?.name === 'TimeoutError') {
@@ -188,17 +191,28 @@ export function EmployeeProfile() {
         await fetch(`${API_BASE_URL}/api/notifications/${currentNotif.id}`, {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(notifForm)
+          body: JSON.stringify({
+            ...notifForm,
+            target_type: currentNotif.target_type || 'individual',
+            employee_id: currentNotif.employee_id || id
+          })
         });
       } else {
         await fetch(`${API_BASE_URL}/api/notifications`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(notifForm)
+          body: JSON.stringify({
+            ...notifForm,
+            target_type: 'individual',
+            employee_id: id
+          })
         });
       }
       const notifRes = await fetch(`${API_BASE_URL}/api/notifications`);
-      if (notifRes.ok) setNotifications(await notifRes.json());
+      if (notifRes.ok) {
+        const allNotifs = await notifRes.json();
+        setNotifications(allNotifs.filter((n: any) => n.target_type === 'all' || String(n.employee_id) === String(id)));
+      }
       setIsNotifModalOpen(false);
     } catch (err) { console.error(err); }
   };
