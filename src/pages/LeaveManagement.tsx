@@ -148,7 +148,7 @@ export function LeaveManagement() {
     <div className="space-y-6 animate-in fade-in duration-500 pb-10">
       <div>
         <h1 className="text-3xl font-bold tracking-tight text-foreground">Leave Management</h1>
-        <p className="text-muted-foreground mt-1">Manage employee leave requests for the financial year (April - March).</p>
+        <p className="text-muted-foreground mt-1">Manage employee leave requests for the financial year (April 2026 - March 2027).</p>
         <div className="mt-3 text-xs bg-primary/10 text-primary px-3 py-2 rounded-lg border border-primary/20 inline-block font-medium">
           <Info className="w-4 h-4 inline mr-1" />
           Sundays are automatically declared as holidays and excluded from leave duration.
@@ -162,7 +162,7 @@ export function LeaveManagement() {
             <div className="p-3 rounded-xl bg-blue-100 text-blue-600">
               <CalendarRange className="w-6 h-6" />
             </div>
-            <span className="text-xs font-medium text-muted-foreground bg-muted px-2 py-1 rounded-full">Apr - Mar</span>
+            <span className="text-xs font-medium text-muted-foreground bg-muted px-2 py-1 rounded-full">April to March</span>
           </div>
           <h3 className="text-muted-foreground text-sm font-medium">Total Casual Leaves Approved</h3>
           <div className="text-3xl font-bold text-foreground mt-1">{casualLeaveCount}</div>
@@ -175,7 +175,7 @@ export function LeaveManagement() {
             <div className="p-3 rounded-xl bg-rose-100 text-rose-600">
               <HeartPulse className="w-6 h-6" />
             </div>
-            <span className="text-xs font-medium text-muted-foreground bg-muted px-2 py-1 rounded-full">Apr - Mar</span>
+            <span className="text-xs font-medium text-muted-foreground bg-muted px-2 py-1 rounded-full">April to March</span>
           </div>
           <h3 className="text-muted-foreground text-sm font-medium">Total Sick Leaves Approved</h3>
           <div className="text-3xl font-bold text-foreground mt-1">{sickLeaveCount}</div>

@@ -119,6 +119,26 @@ export function EmployeeProfile() {
     }
   };
   
+  const [lateSigninTime, setLateSigninTime] = useState('10:30');
+
+  const handleAllowLateSignin = async () => {
+    try {
+      const response = await fetch(`${API_BASE_URL}/api/employees/${id}/allow-late-signin`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ allowed_until: lateSigninTime }),
+      });
+      if (response.ok) {
+        alert(`Late sign-in access granted for today (up to ${lateSigninTime}).`);
+      } else {
+        alert('Failed to grant late sign-in access.');
+      }
+    } catch (err) {
+      console.error(err);
+      alert('Error granting late sign-in access.');
+    }
+  };
+  
   // Work Info State
   const [workInfo, setWorkInfo] = useState({
     head: '',
@@ -336,12 +356,34 @@ export function EmployeeProfile() {
             <input type="file" ref={fileInputRef} className="hidden" accept="image/png, image/jpeg, image/jpg" onChange={handleFileChange} disabled={isUploading} />
           </div>
         </div>
-        <div className="text-center md:text-left mt-4 md:mt-0">
+        <div className="text-center md:text-left mt-4 md:mt-0 flex-1">
           <h1 className="text-2xl font-bold text-foreground">{employee.name}</h1>
           <p className="text-muted-foreground">{employee.position}</p>
           <div className="mt-2 inline-flex items-center px-2.5 py-0.5 rounded-md text-sm font-medium bg-primary/10 text-primary">
             {employee.id}
           </div>
+        </div>
+        <div className="mt-4 md:mt-0 flex flex-col md:flex-row items-center gap-2 shrink-0">
+          <select 
+            value={lateSigninTime} 
+            onChange={(e) => setLateSigninTime(e.target.value)} 
+            className="px-3 py-2 bg-background border border-border rounded-lg text-sm"
+          >
+            <option value="10:30">10:30 AM</option>
+            <option value="11:00">11:00 AM</option>
+            <option value="11:30">11:30 AM</option>
+            <option value="12:00">12:00 PM</option>
+            <option value="12:30">12:30 PM</option>
+            <option value="13:00">01:00 PM</option>
+            <option value="13:30">01:30 PM</option>
+            <option value="14:00">02:00 PM</option>
+          </select>
+          <button 
+            onClick={handleAllowLateSignin}
+            className="px-4 py-2 bg-amber-500 hover:bg-amber-600 text-white text-sm font-medium rounded-lg shadow-sm transition-colors"
+          >
+            Allow Late Sign-In
+          </button>
         </div>
       </div>
 

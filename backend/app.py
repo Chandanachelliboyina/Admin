@@ -240,6 +240,43 @@ async def update_employee(employee_id: str, employee: Employee):
         raise HTTPException(status_code=404, detail="Employee not found")
     return {"message": "Employee updated successfully"}
 
+@app.put("/api/employees/{employee_id}/allow-late-signin")
+async def toggle_late_signin(employee_id: str, request: Request):
+    db = get_previous_db()
+    if db is None:
+        raise HTTPException(status_code=500, detail="Database connection not active")
+        
+    try:
+        payload = await request.json()
+    except Exception:
+        payload = {}
+        
+    allowed_until = payload.get("allowed_until", "10:30")
+    
+    clean_id = employee_id.strip()
+    doc = None
+    for field in ("employee_id", "id", "empId", "employeeId"):
+        doc = await db.employees.find_one({field: clean_id})
+        if doc:
+            break
+            
+    if not doc:
+        try:
+            from bson import ObjectId
+            doc = await db.employees.find_one({"_id": ObjectId(clean_id)})
+        except Exception:
+            pass
+            
+    if not doc:
+        raise HTTPException(status_code=404, detail="Employee not found")
+        
+    await db.employees.update_one(
+        {"_id": doc["_id"]},
+        {"$set": {"allow_late_signin": allowed_until}}
+    )
+        
+    return {"message": f"Late sign-in access granted for today until {allowed_until}"}
+
 
 @app.delete("/api/employees/{employee_id}")
 async def delete_employee(employee_id: str):
