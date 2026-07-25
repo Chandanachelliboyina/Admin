@@ -47,7 +47,7 @@ export function EmployeeManagement() {
         location: emp.address || 'N/A',
         photo: emp.photo || emp.profile_picture || `https://i.pravatar.cc/150?u=${emp.id}`,
         has_access: emp.has_access !== undefined ? emp.has_access : true,
-      }));
+      })).filter((emp: Employee) => emp.name !== 'Unknown'); // Hide incomplete profiles
       
       setEmployees(mappedEmployees);
     } catch (err: any) {
