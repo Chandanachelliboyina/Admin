@@ -10,6 +10,7 @@ type Employee = {
   phone: string;
   location: string;
   photo: string;
+  has_access?: boolean;
 };
 
 export function EmployeeManagement() {
@@ -74,6 +75,24 @@ export function EmployeeManagement() {
         console.error(err);
         alert('Failed to delete employee');
       }
+    }
+  };
+
+  const handleToggleAccess = async (empId: string, currentAccess: boolean) => {
+    try {
+      const response = await fetch(`${API_BASE_URL}/api/employees/${empId}/access`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ has_access: !currentAccess })
+      });
+      if (response.ok) {
+        setEmployees(employees.map(emp => emp.id === empId ? { ...emp, has_access: !currentAccess } : emp));
+      } else {
+        alert('Failed to update employee access');
+      }
+    } catch (err) {
+      console.error(err);
+      alert('Error updating employee access');
     }
   };
 
@@ -226,15 +245,13 @@ export function EmployeeManagement() {
                     <td className="px-6 py-4 text-foreground">{emp.phone}</td>
                     <td className="px-6 py-4 text-foreground">{emp.location}</td>
                     <td className="px-6 py-4 text-right space-x-2">
+
                       <button 
-                        onClick={() => {
-                          setEditingEmployee(emp);
-                          setIsEditModalOpen(true);
-                        }}
-                        className="text-blue-600 hover:bg-blue-50 px-3 py-1.5 rounded-md transition-colors text-sm font-medium border border-transparent hover:border-blue-200" 
-                        title="Remove Access"
+                        onClick={() => handleToggleAccess(emp.id, emp.has_access !== false)}
+                        className={`${emp.has_access !== false ? 'text-amber-600 hover:bg-amber-50 hover:border-amber-200' : 'text-emerald-600 hover:bg-emerald-50 hover:border-emerald-200'} px-3 py-1.5 rounded-md transition-colors text-sm font-medium border border-transparent`} 
+                        title={emp.has_access !== false ? "Remove Access" : "Grant Access"}
                       >
-                        Remove Access
+                        {emp.has_access !== false ? "Remove Access" : "Grant Access"}
                       </button>
                       <button 
                         onClick={() => handleDelete(emp.id)}

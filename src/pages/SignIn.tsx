@@ -20,17 +20,17 @@ export function SignIn() {
     });
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
     
     // Check if the user is registered with correct password
-    const success = login(formData.email, formData.password);
-    if (success) {
+    const result = await login(formData.email, formData.password);
+    if (result.success) {
       console.log('Logging in with:', formData.email);
       navigate('/');
     } else {
-      setError('Invalid email or password. Please try again or create an account.');
+      setError(result.message || 'Invalid email or password. Please try again or create an account.');
     }
   };
 

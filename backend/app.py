@@ -46,6 +46,7 @@ class Employee(BaseModel):
     mandal: Optional[str] = "N/A"
     district: Optional[str] = "N/A"
     profile_picture: Optional[str] = None
+    has_access: Optional[bool] = True
 
 class NotificationBase(BaseModel):
     title: str
@@ -93,6 +94,7 @@ def _map_employee(doc: dict, fallback_id: str = "") -> dict:
         "mandal":         doc.get("mandal") or "N/A",
         "district":       doc.get("district") or "N/A",
         "profile_picture": doc.get("profile_photo_b64") or doc.get("profile_picture"),
+        "has_access":     doc.get("has_access", True),
     }
 
 # ─── Root ─────────────────────────────────────────────────────
@@ -276,6 +278,23 @@ async def toggle_late_signin(employee_id: str, request: Request):
     )
         
     return {"message": f"Late sign-in access granted for today until {allowed_until}"}
+
+class AccessToggle(BaseModel):
+    has_access: bool
+
+@app.put("/api/employees/{employee_id}/access")
+async def toggle_employee_access(employee_id: str, access_data: AccessToggle):
+    db = get_previous_db()
+    if db is None:
+        raise HTTPException(status_code=500, detail="Database connection not active")
+    
+    result = await db.employees.update_one(
+        {"$or": [{"employee_id": employee_id}, {"id": employee_id}]},
+        {"$set": {"has_access": access_data.has_access}}
+    )
+    if result.matched_count == 0:
+        raise HTTPException(status_code=404, detail="Employee not found")
+    return {"message": f"Employee access updated to {access_data.has_access}"}
 
 
 @app.delete("/api/employees/{employee_id}")

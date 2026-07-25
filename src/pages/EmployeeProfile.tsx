@@ -57,7 +57,14 @@ export function EmployeeProfile() {
         }
         if (leaveBalRes.ok) {
             const lb = await leaveBalRes.json();
-            setLeaveBalances({ casualTotal: lb.casualTotal, sickTotal: lb.sickTotal });
+            setLeaveBalances({ 
+                casualTotal: lb.casualTotal ?? 12,
+                casualTaken: lb.casualTaken ?? 0,
+                casualRemaining: lb.casualRemaining ?? 12,
+                sickTotal: lb.sickTotal ?? 12,
+                sickTaken: lb.sickTaken ?? 0,
+                sickRemaining: lb.sickRemaining ?? 12
+            });
         }
         if (notifRes.ok) {
           const allNotifs = await notifRes.json();
@@ -158,20 +165,28 @@ export function EmployeeProfile() {
   
   // Leave Management State
   const [isEditingLeaves, setIsEditingLeaves] = useState(false);
-  const [leaveBalances, setLeaveBalances] = useState({ casualTotal: 12, sickTotal: 12 });
-  const [leaveForm, setLeaveForm] = useState({ casualTotal: 12, sickTotal: 12 });
+  const [leaveBalances, setLeaveBalances] = useState({ 
+    casualTotal: 12, casualTaken: 0, casualRemaining: 12,
+    sickTotal: 12, sickTaken: 0, sickRemaining: 12
+  });
+  const [leaveForm, setLeaveForm] = useState({ 
+    casualTotal: 12, casualTaken: 0, casualRemaining: 12,
+    sickTotal: 12, sickTaken: 0, sickRemaining: 12
+  });
 
-  const handleLeaveFormChange = (type: 'casual' | 'sick', value: number) => {
+  const handleLeaveFormChange = (field: string, value: number) => {
     setLeaveForm(prev => ({
       ...prev,
-      [type === 'casual' ? 'casualTotal' : 'sickTotal']: value
+      [field]: value
     }));
   };
 
   const casualTotal = leaveBalances.casualTotal;
-  const casualTaken = (leaves || []).filter(l => (l.type || '').includes('Casual') && l.status === 'Approved').length;
+  const casualTaken = leaveBalances.casualTaken;
+  const casualRemaining = leaveBalances.casualRemaining;
   const sickTotal = leaveBalances.sickTotal;
-  const sickTaken = (leaves || []).filter(l => (l.type || '').includes('Sick') && l.status === 'Approved').length;
+  const sickTaken = leaveBalances.sickTaken;
+  const sickRemaining = leaveBalances.sickRemaining;
 
 
 
@@ -834,15 +849,15 @@ export function EmployeeProfile() {
                         onClick={async () => {
                           try {
                             const newBalances = {
-                                casualTotal: leaveForm.casualTotal, casualTaken: casualTaken, casualRemaining: leaveForm.casualTotal - casualTaken,
-                                sickTotal: leaveForm.sickTotal, sickTaken: sickTaken, sickRemaining: leaveForm.sickTotal - sickTaken
+                                casualTotal: leaveForm.casualTotal, casualTaken: leaveForm.casualTaken, casualRemaining: leaveForm.casualRemaining,
+                                sickTotal: leaveForm.sickTotal, sickTaken: leaveForm.sickTaken, sickRemaining: leaveForm.sickRemaining
                             };
                             await fetch(`${API_BASE_URL}/api/employees/${id}/leave-balances`, {
                                 method: 'PUT',
                                 headers: { 'Content-Type': 'application/json' },
                                 body: JSON.stringify(newBalances)
                             });
-                            setLeaveBalances({ casualTotal: leaveForm.casualTotal, sickTotal: leaveForm.sickTotal });
+                            setLeaveBalances(newBalances);
                             setIsEditingLeaves(false);
                           } catch (err) {
                             console.error(err);
@@ -863,10 +878,7 @@ export function EmployeeProfile() {
                   ) : (
                     <button 
                       onClick={() => {
-                        setLeaveForm({ 
-                          casualTotal: leaveBalances.casualTotal,
-                          sickTotal: leaveBalances.sickTotal
-                        });
+                        setLeaveForm({ ...leaveBalances });
                         setIsEditingLeaves(true);
                       }}
                       className="bg-muted text-foreground px-4 py-2 rounded-lg text-sm font-medium hover:bg-muted/80 transition-colors"
@@ -882,21 +894,21 @@ export function EmployeeProfile() {
                 <div className="bg-[#f8fbff] border border-blue-100 p-6 rounded-2xl shadow-sm">
                   <div className="mb-6">
                     <h3 className="text-blue-900 font-semibold text-lg">Casual Leaves</h3>
-                    <p className="text-blue-500/80 text-sm">April 2026 to March 2027</p>
+                    <p className="text-blue-500/80 text-sm">April to March</p>
                   </div>
                   
                   {isEditingLeaves ? (
                     <div className="grid grid-cols-3 text-center gap-2">
                       <div>
-                        <input type="number" className="w-16 text-center border border-blue-200 rounded-md text-xl font-bold text-blue-900 bg-white shadow-inner" value={leaveForm.casualTotal} onChange={(e) => handleLeaveFormChange('casual', parseInt(e.target.value) || 0)} />
+                        <input type="number" className="w-16 text-center border border-blue-200 rounded-md text-xl font-bold text-blue-900 bg-white shadow-inner" value={leaveForm.casualTotal} onChange={(e) => handleLeaveFormChange('casualTotal', parseInt(e.target.value) || 0)} />
                         <div className="text-xs text-blue-600 mt-1">Total</div>
                       </div>
                       <div>
-                        <div className="w-16 mx-auto text-center border border-blue-200 rounded-md text-xl font-bold text-red-600 bg-white/50 shadow-inner py-1 opacity-75">{casualTaken}</div>
+                        <input type="number" className="w-16 text-center border border-blue-200 rounded-md text-xl font-bold text-red-600 bg-white shadow-inner" value={leaveForm.casualTaken} onChange={(e) => handleLeaveFormChange('casualTaken', parseInt(e.target.value) || 0)} />
                         <div className="text-xs text-blue-600 mt-1">Taken</div>
                       </div>
                       <div>
-                        <div className="w-16 mx-auto text-center border border-blue-200 rounded-md text-xl font-bold text-green-600 bg-white/50 shadow-inner py-1 opacity-75">{leaveForm.casualTotal - casualTaken}</div>
+                        <input type="number" className="w-16 text-center border border-blue-200 rounded-md text-xl font-bold text-green-600 bg-white shadow-inner" value={leaveForm.casualRemaining} onChange={(e) => handleLeaveFormChange('casualRemaining', parseInt(e.target.value) || 0)} />
                         <div className="text-xs text-blue-600 mt-1">Remaining</div>
                       </div>
                     </div>
@@ -911,7 +923,7 @@ export function EmployeeProfile() {
                         <div className="text-xs text-blue-600 mt-1">Taken</div>
                       </div>
                       <div>
-                        <div className="text-2xl font-bold text-green-600">{casualTotal - casualTaken}</div>
+                        <div className="text-2xl font-bold text-green-600">{casualRemaining}</div>
                         <div className="text-xs text-blue-600 mt-1">Remaining</div>
                       </div>
                     </div>
@@ -922,21 +934,21 @@ export function EmployeeProfile() {
                 <div className="bg-[#fdfaff] border border-purple-100 p-6 rounded-2xl shadow-sm">
                   <div className="mb-6">
                     <h3 className="text-purple-900 font-semibold text-lg">Sick Leaves</h3>
-                    <p className="text-purple-500/80 text-sm">April 2026 to March 2027</p>
+                    <p className="text-purple-500/80 text-sm">April to March</p>
                   </div>
                   
                   {isEditingLeaves ? (
                     <div className="grid grid-cols-3 text-center gap-2">
                       <div>
-                        <input type="number" className="w-16 text-center border border-purple-200 rounded-md text-xl font-bold text-purple-900 bg-white shadow-inner" value={leaveForm.sickTotal} onChange={(e) => handleLeaveFormChange('sick', parseInt(e.target.value) || 0)} />
+                        <input type="number" className="w-16 text-center border border-purple-200 rounded-md text-xl font-bold text-purple-900 bg-white shadow-inner" value={leaveForm.sickTotal} onChange={(e) => handleLeaveFormChange('sickTotal', parseInt(e.target.value) || 0)} />
                         <div className="text-xs text-purple-600 mt-1">Total</div>
                       </div>
                       <div>
-                        <div className="w-16 mx-auto text-center border border-purple-200 rounded-md text-xl font-bold text-red-600 bg-white/50 shadow-inner py-1 opacity-75">{sickTaken}</div>
+                        <input type="number" className="w-16 text-center border border-purple-200 rounded-md text-xl font-bold text-red-600 bg-white shadow-inner" value={leaveForm.sickTaken} onChange={(e) => handleLeaveFormChange('sickTaken', parseInt(e.target.value) || 0)} />
                         <div className="text-xs text-purple-600 mt-1">Taken</div>
                       </div>
                       <div>
-                        <div className="w-16 mx-auto text-center border border-purple-200 rounded-md text-xl font-bold text-green-600 bg-white/50 shadow-inner py-1 opacity-75">{leaveForm.sickTotal - sickTaken}</div>
+                        <input type="number" className="w-16 text-center border border-purple-200 rounded-md text-xl font-bold text-green-600 bg-white shadow-inner" value={leaveForm.sickRemaining} onChange={(e) => handleLeaveFormChange('sickRemaining', parseInt(e.target.value) || 0)} />
                         <div className="text-xs text-purple-600 mt-1">Remaining</div>
                       </div>
                     </div>
@@ -951,7 +963,7 @@ export function EmployeeProfile() {
                         <div className="text-xs text-purple-600 mt-1">Taken</div>
                       </div>
                       <div>
-                        <div className="text-2xl font-bold text-green-600">{sickTotal - sickTaken}</div>
+                        <div className="text-2xl font-bold text-green-600">{sickRemaining}</div>
                         <div className="text-xs text-purple-600 mt-1">Remaining</div>
                       </div>
                     </div>

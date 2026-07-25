@@ -1,8 +1,9 @@
 import { createContext, useContext, useState, useEffect, type ReactNode } from 'react';
+import { API_BASE_URL } from '../config';
 
 interface AuthContextType {
   isAuthenticated: boolean;
-  login: (email: string, password: string) => boolean;
+  login: (email: string, password: string) => Promise<{success: boolean, message?: string}>;
   logout: () => void;
   register: (email: string, password: string) => void;
 }
@@ -11,11 +12,32 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [isAuthenticated, setIsAuthenticated] = useState<boolean>(false);
+  const [currentUserEmail, setCurrentUserEmail] = useState<string | null>(null);
 
-  // Load auth state from localStorage on mount
+  // Load auth state from localStorage on mount and verify access
   useEffect(() => {
     const authStatus = localStorage.getItem('isAuthenticated') === 'true';
+    const email = localStorage.getItem('currentUserEmail');
+    
     setIsAuthenticated(authStatus);
+    if (email) setCurrentUserEmail(email);
+
+    if (authStatus && email && email !== 'admin@example.com') {
+      // Verify access with backend
+      fetch(`${API_BASE_URL}/api/employees`)
+        .then(res => res.json())
+        .then(employees => {
+          const emp = employees.find((e: any) => e.email === email);
+          if (emp && emp.has_access === false) {
+            // Revoke access immediately if they are currently logged in
+            setIsAuthenticated(false);
+            setCurrentUserEmail(null);
+            localStorage.removeItem('isAuthenticated');
+            localStorage.removeItem('currentUserEmail');
+          }
+        })
+        .catch(console.error);
+    }
   }, []);
 
   const register = (email: string, password: string) => {
@@ -23,30 +45,58 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     localStorage.setItem('registeredUser', JSON.stringify({ email, password }));
   };
 
-  const login = (email: string, password: string) => {
+  const login = async (email: string, password: string): Promise<{success: boolean, message?: string}> => {
     const storedData = localStorage.getItem('registeredUser');
     
     // Default admin fallback for testing without registering first
     if (email === 'admin@example.com' && password === 'admin123') {
       setIsAuthenticated(true);
+      setCurrentUserEmail(email);
       localStorage.setItem('isAuthenticated', 'true');
-      return true;
+      localStorage.setItem('currentUserEmail', email);
+      return { success: true };
+    }
+
+    // Check if it's an employee in the backend
+    try {
+      const response = await fetch(`${API_BASE_URL}/api/employees`);
+      if (response.ok) {
+        const employees = await response.json();
+        const emp = employees.find((e: any) => e.email === email);
+        if (emp) {
+          if (emp.has_access === false) {
+            return { success: false, message: "admin not give grant access" };
+          }
+          // Accept any password for mock employee login
+          setIsAuthenticated(true);
+          setCurrentUserEmail(email);
+          localStorage.setItem('isAuthenticated', 'true');
+          localStorage.setItem('currentUserEmail', email);
+          return { success: true };
+        }
+      }
+    } catch (e) {
+      console.error(e);
     }
 
     if (storedData) {
       const { email: storedEmail, password: storedPassword } = JSON.parse(storedData);
       if (storedEmail === email && storedPassword === password) {
         setIsAuthenticated(true);
+        setCurrentUserEmail(email);
         localStorage.setItem('isAuthenticated', 'true');
-        return true;
+        localStorage.setItem('currentUserEmail', email);
+        return { success: true };
       }
     }
-    return false;
+    return { success: false, message: "Invalid email or password. Please try again or create an account." };
   };
 
   const logout = () => {
     setIsAuthenticated(false);
+    setCurrentUserEmail(null);
     localStorage.removeItem('isAuthenticated');
+    localStorage.removeItem('currentUserEmail');
   };
 
   return (
