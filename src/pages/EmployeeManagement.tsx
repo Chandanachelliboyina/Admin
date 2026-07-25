@@ -10,6 +10,7 @@ type Employee = {
   phone: string;
   location: string;
   photo: string;
+  email?: string;
   has_access?: boolean;
 };
 
@@ -44,6 +45,7 @@ export function EmployeeManagement() {
         phone: emp.mobileNumber || 'N/A',
         location: emp.address || 'N/A',
         photo: emp.photo || emp.profile_picture || `https://i.pravatar.cc/150?u=${emp.id}`,
+        has_access: emp.has_access !== undefined ? emp.has_access : true,
       }));
       
       setEmployees(mappedEmployees);
@@ -105,14 +107,12 @@ export function EmployeeManagement() {
 
   const handleAddSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    const id = `EMP${Math.floor(1000 + Math.random() * 9000)}`;
-    
     const payload = {
-      id,
+      id: newEmployee.id || `EMP${Math.floor(1000 + Math.random() * 9000)}`,
       name: newEmployee.name || '',
       position: newEmployee.role || '',
       department: newEmployee.department || '',
-      email: '',
+      email: newEmployee.email || '',
       mobileNumber: newEmployee.phone || '',
       gender: '',
       dateOfBirth: '',
@@ -146,7 +146,7 @@ export function EmployeeManagement() {
       name: editingEmployee.name || 'Unknown',
       position: editingEmployee.role || 'N/A',
       department: editingEmployee.department || 'N/A',
-      email: 'N/A',
+      email: editingEmployee.email || 'N/A',
       mobileNumber: editingEmployee.phone || 'N/A',
       gender: 'N/A',
       dateOfBirth: 'N/A',
@@ -288,61 +288,26 @@ export function EmployeeManagement() {
             </div>
             <form onSubmit={handleAddSubmit} className="p-4 space-y-4">
               <div className="space-y-1">
-                <label className="text-sm font-medium">Full Name</label>
+                <label className="text-sm font-medium">Employee ID</label>
                 <input 
                   type="text" 
                   required
-                  value={newEmployee.name || ''} 
-                  onChange={(e) => setNewEmployee({...newEmployee, name: e.target.value})}
-                  className="w-full px-3 py-2 bg-background border border-input rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-primary"
-                  placeholder="Jane Doe"
+                  value={newEmployee.id || ''} 
+                  onChange={(e) => setNewEmployee({...newEmployee, id: e.target.value})}
+                  className="w-full px-3 py-2 bg-background border border-input rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-primary uppercase"
+                  placeholder="e.g. EMP1234"
                 />
               </div>
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-1">
-                  <label className="text-sm font-medium">Role</label>
-                  <input 
-                    type="text" 
-                    required
-                    value={newEmployee.role || ''} 
-                    onChange={(e) => setNewEmployee({...newEmployee, role: e.target.value})}
-                    className="w-full px-3 py-2 bg-background border border-input rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-primary"
-                    placeholder="Developer"
-                  />
-                </div>
-                <div className="space-y-1">
-                  <label className="text-sm font-medium">Department</label>
-                  <input 
-                    type="text" 
-                    required
-                    value={newEmployee.department || ''} 
-                    onChange={(e) => setNewEmployee({...newEmployee, department: e.target.value})}
-                    className="w-full px-3 py-2 bg-background border border-input rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-primary"
-                    placeholder="Engineering"
-                  />
-                </div>
-              </div>
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-1">
-                  <label className="text-sm font-medium">Phone</label>
-                  <input 
-                    type="text" 
-                    value={newEmployee.phone || ''} 
-                    onChange={(e) => setNewEmployee({...newEmployee, phone: e.target.value})}
-                    className="w-full px-3 py-2 bg-background border border-input rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-primary"
-                    placeholder="+1 555-0000"
-                  />
-                </div>
-                <div className="space-y-1">
-                  <label className="text-sm font-medium">Location</label>
-                  <input 
-                    type="text" 
-                    value={newEmployee.location || ''} 
-                    onChange={(e) => setNewEmployee({...newEmployee, location: e.target.value})}
-                    className="w-full px-3 py-2 bg-background border border-input rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-primary"
-                    placeholder="HQ"
-                  />
-                </div>
+              <div className="space-y-1">
+                <label className="text-sm font-medium">Email</label>
+                <input 
+                  type="email" 
+                  required
+                  value={newEmployee.email || ''} 
+                  onChange={(e) => setNewEmployee({...newEmployee, email: e.target.value})}
+                  className="w-full px-3 py-2 bg-background border border-input rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-primary"
+                  placeholder="jane@example.com"
+                />
               </div>
               <div className="pt-4 flex justify-end space-x-2">
                 <button 
@@ -375,16 +340,28 @@ export function EmployeeManagement() {
               </button>
             </div>
             <form onSubmit={handleEditSubmit} className="p-4 space-y-4">
-              <div className="space-y-1">
-                <label className="text-sm font-medium">Full Name</label>
-                <input 
-                  type="text" 
-                  required
-                  value={editingEmployee.name || ''} 
-                  onChange={(e) => setEditingEmployee({...editingEmployee, name: e.target.value})}
-                  className="w-full px-3 py-2 bg-background border border-input rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-primary"
-                  placeholder="Jane Doe"
-                />
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-1">
+                  <label className="text-sm font-medium">Full Name</label>
+                  <input 
+                    type="text" 
+                    required
+                    value={editingEmployee.name || ''} 
+                    onChange={(e) => setEditingEmployee({...editingEmployee, name: e.target.value})}
+                    className="w-full px-3 py-2 bg-background border border-input rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-primary"
+                    placeholder="Jane Doe"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <label className="text-sm font-medium">Email</label>
+                  <input 
+                    type="email" 
+                    value={editingEmployee.email || ''} 
+                    onChange={(e) => setEditingEmployee({...editingEmployee, email: e.target.value})}
+                    className="w-full px-3 py-2 bg-background border border-input rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-primary"
+                    placeholder="jane@example.com"
+                  />
+                </div>
               </div>
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-1">
