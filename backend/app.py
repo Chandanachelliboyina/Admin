@@ -839,6 +839,53 @@ async def update_leave_balances(employee_id: str, balances: LeaveBalances):
     )
     return {"message": "Leave balances updated"}
 
+@app.get("/api/leave-balances/summary")
+async def get_all_leave_balances_summary():
+    db = get_previous_db()
+    if db is None:
+        return {"casualTotal": 0, "casualTaken": 0, "casualRemaining": 0, "sickTotal": 0, "sickTaken": 0, "sickRemaining": 0}
+    
+    total_casual = 0
+    taken_casual = 0
+    remaining_casual = 0
+    total_sick = 0
+    taken_sick = 0
+    remaining_sick = 0
+    
+    employees_cursor = db.employees.find({})
+    async for emp in employees_cursor:
+        emp_id = str(emp.get("employee_id") or emp.get("id") or emp.get("_id", ""))
+        if not emp_id: continue
+        
+        doc = await db.leave_balances.find_one({"employee_id": emp_id})
+        if doc:
+            total_casual += doc.get("casualTotal", 12)
+            taken_casual += doc.get("casualTaken", 0)
+            remaining_casual += doc.get("casualRemaining", 12)
+            total_sick += doc.get("sickTotal", 12)
+            taken_sick += doc.get("sickTaken", 0)
+            remaining_sick += doc.get("sickRemaining", 12)
+        else:
+            default_leaves = 12
+            if emp.get("joining_date") and emp.get("joining_date") != "N/A":
+                default_leaves = calculate_prorated_leaves(emp["joining_date"])
+            
+            total_casual += default_leaves
+            taken_casual += 0
+            remaining_casual += default_leaves
+            total_sick += default_leaves
+            taken_sick += 0
+            remaining_sick += default_leaves
+
+    return {
+        "casualTotal": total_casual,
+        "casualTaken": taken_casual,
+        "casualRemaining": remaining_casual,
+        "sickTotal": total_sick,
+        "sickTaken": taken_sick,
+        "sickRemaining": remaining_sick
+    }
+
 class LeaveStatusUpdate(BaseModel):
     status: str
 
@@ -847,18 +894,68 @@ async def update_leave_status(leave_id: str, status_update: LeaveStatusUpdate):
     db = get_previous_db()
     if db is None: return {"message": "Mock mode"}
     from bson.objectid import ObjectId
+    from datetime import datetime, timedelta
     try:
         query = {"_id": ObjectId(leave_id)}
     except Exception:
         query = {"_id": leave_id}
         
     leave_doc = await db.leaves.find_one(query)
+    if not leave_doc:
+        return {"message": "Leave not found"}
+        
+    old_status = leave_doc.get("status", "Pending")
+    new_status = status_update.status
     
-    await db.leaves.update_one(query, {"$set": {"status": status_update.status}})
+    await db.leaves.update_one(query, {"$set": {"status": new_status}})
+    
+    emp_id = leave_doc.get("employee_id")
+    if emp_id and old_status != new_status:
+        # Calculate days
+        leave_type = leave_doc.get("leave_type", "Leave")
+        start_str = leave_doc.get("start_date", leave_doc.get("leave_date"))
+        end_str = leave_doc.get("end_date", leave_doc.get("leave_date"))
+        
+        days = 0
+        if start_str and end_str:
+            try:
+                current_date = datetime.strptime(str(start_str)[:10], "%Y-%m-%d")
+                end_date = datetime.strptime(str(end_str)[:10], "%Y-%m-%d")
+                while current_date <= end_date:
+                    if current_date.weekday() != 6: # Skip Sunday
+                        days += 1
+                    current_date += timedelta(days=1)
+            except Exception as e:
+                print("Error calculating days:", e)
+                days = 1
+        
+        if days > 0:
+            bal_doc = await db.leave_balances.find_one({"employee_id": emp_id})
+            if bal_doc:
+                is_sick = "Sick" in leave_type
+                if new_status == "Approved":
+                    # Deduct balance
+                    if is_sick:
+                        taken = bal_doc.get("sickTaken", 0) + days
+                        remaining = max(0, bal_doc.get("sickTotal", 12) - taken)
+                        await db.leave_balances.update_one({"employee_id": emp_id}, {"$set": {"sickTaken": taken, "sickRemaining": remaining}})
+                    else:
+                        taken = bal_doc.get("casualTaken", 0) + days
+                        remaining = max(0, bal_doc.get("casualTotal", 12) - taken)
+                        await db.leave_balances.update_one({"employee_id": emp_id}, {"$set": {"casualTaken": taken, "casualRemaining": remaining}})
+                elif old_status == "Approved":
+                    # Add back balance
+                    if is_sick:
+                        taken = max(0, bal_doc.get("sickTaken", 0) - days)
+                        remaining = bal_doc.get("sickTotal", 12) - taken
+                        await db.leave_balances.update_one({"employee_id": emp_id}, {"$set": {"sickTaken": taken, "sickRemaining": remaining}})
+                    else:
+                        taken = max(0, bal_doc.get("casualTaken", 0) - days)
+                        remaining = bal_doc.get("casualTotal", 12) - taken
+                        await db.leave_balances.update_one({"employee_id": emp_id}, {"$set": {"casualTaken": taken, "casualRemaining": remaining}})
     
     # Auto-generate notification for the employee
-    if leave_doc and "employee_id" in leave_doc:
-        emp_id = leave_doc["employee_id"]
+    if emp_id:
         notif_doc = {
             "title": f"Leave Request {status_update.status}",
             "message": f"Your leave request has been {status_update.status.lower()}.",

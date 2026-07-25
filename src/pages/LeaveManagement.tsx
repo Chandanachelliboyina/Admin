@@ -17,8 +17,10 @@ interface LeaveRequest {
 export function LeaveManagement() {
   const [requests, setRequests] = useState<LeaveRequest[]>([]);
   const [isLoading, setIsLoading] = useState(true);
-  const [casualLeaveCount, setCasualLeaveCount] = useState(0);
-  const [sickLeaveCount, setSickLeaveCount] = useState(0);
+  const [leaveBalances, setLeaveBalances] = useState({
+    casualTotal: 0, casualTaken: 0, casualRemaining: 0,
+    sickTotal: 0, sickTaken: 0, sickRemaining: 0
+  });
 
   // Notification State
   const [notificationTitle, setNotificationTitle] = useState('');
@@ -30,49 +32,26 @@ export function LeaveManagement() {
 
   const fetchLeaves = async () => {
     try {
-      const res = await fetch(`${API_BASE_URL}/api/leaves`);
-      if (res.ok) {
-        const data = await res.json();
-        
+      const [leavesRes, balancesRes] = await Promise.all([
+        fetch(`${API_BASE_URL}/api/leaves`),
+        fetch(`${API_BASE_URL}/api/leave-balances/summary`)
+      ]);
+      
+      if (leavesRes.ok) {
+        const data = await leavesRes.json();
         if (Array.isArray(data)) {
           setRequests(data);
-          
-          // Compute casual and sick leave totals based on approved requests
-          let casual = 0;
-          let sick = 0;
-          data.forEach((req: LeaveRequest) => {
-            if (req.status === 'Approved') {
-              try {
-                let days = 0;
-                let currentDate = new Date(req.startDate);
-                let endDate = new Date(req.endDate);
-                
-                // Safety check to prevent infinite loops if dates are invalid
-                if (!isNaN(currentDate.getTime()) && !isNaN(endDate.getTime())) {
-                  // Limit the maximum number of days to prevent browser hanging just in case
-                  let maxIterations = 365; 
-                  while (currentDate <= endDate && maxIterations > 0) {
-                    if (currentDate.getDay() !== 0) days++;
-                    currentDate.setDate(currentDate.getDate() + 1);
-                    maxIterations--;
-                  }
-                }
-                
-                if (req.type?.includes('Casual')) casual += days;
-                else if (req.type?.includes('Sick')) sick += days;
-              } catch (err) {
-                console.error("Error processing dates for leave:", err);
-              } 
-            }
-          });
-          setCasualLeaveCount(casual);
-          setSickLeaveCount(sick);
         } else {
           console.error("Leave data is not an array:", data);
         }
       }
+      
+      if (balancesRes.ok) {
+        const balancesData = await balancesRes.json();
+        setLeaveBalances(balancesData);
+      }
     } catch (error) {
-      console.error('Failed to fetch leaves:', error);
+      console.error('Failed to fetch leaves or balances:', error);
     } finally {
       setIsLoading(false);
     }
@@ -156,30 +135,60 @@ export function LeaveManagement() {
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        {/* Casual Leave Box */}
-        <div className="bg-card border border-border p-6 rounded-2xl shadow-sm hover:shadow-md transition-shadow">
-          <div className="flex items-center justify-between mb-4">
+        {/* Casual Leaves Card */}
+        <div className="bg-[#f8fbff] border border-blue-100 p-6 rounded-2xl shadow-sm">
+          <div className="mb-6 flex justify-between items-center">
+            <div>
+              <h3 className="text-blue-900 font-semibold text-lg">Casual Leaves (Global)</h3>
+              <p className="text-blue-500/80 text-sm">April to March</p>
+            </div>
             <div className="p-3 rounded-xl bg-blue-100 text-blue-600">
               <CalendarRange className="w-6 h-6" />
             </div>
-            <span className="text-xs font-medium text-muted-foreground bg-muted px-2 py-1 rounded-full">April to March</span>
           </div>
-          <h3 className="text-muted-foreground text-sm font-medium">Total Casual Leaves Approved</h3>
-          <div className="text-3xl font-bold text-foreground mt-1">{casualLeaveCount}</div>
-          <p className="text-xs text-muted-foreground mt-2">Cumulative total for all employees</p>
+          
+          <div className="grid grid-cols-3 text-center divide-x divide-blue-100">
+            <div>
+              <div className="text-2xl font-bold text-blue-900">{leaveBalances.casualTotal}</div>
+              <div className="text-xs text-blue-600 mt-1">Total Allocated</div>
+            </div>
+            <div>
+              <div className="text-2xl font-bold text-red-600">{leaveBalances.casualTaken}</div>
+              <div className="text-xs text-blue-600 mt-1">Total Taken</div>
+            </div>
+            <div>
+              <div className="text-2xl font-bold text-green-600">{leaveBalances.casualRemaining}</div>
+              <div className="text-xs text-blue-600 mt-1">Total Remaining</div>
+            </div>
+          </div>
         </div>
 
-        {/* Sick Leave Box */}
-        <div className="bg-card border border-border p-6 rounded-2xl shadow-sm hover:shadow-md transition-shadow">
-          <div className="flex items-center justify-between mb-4">
-            <div className="p-3 rounded-xl bg-rose-100 text-rose-600">
+        {/* Sick Leaves Card */}
+        <div className="bg-[#fdfaff] border border-purple-100 p-6 rounded-2xl shadow-sm">
+          <div className="mb-6 flex justify-between items-center">
+            <div>
+              <h3 className="text-purple-900 font-semibold text-lg">Sick Leaves (Global)</h3>
+              <p className="text-purple-500/80 text-sm">April to March</p>
+            </div>
+            <div className="p-3 rounded-xl bg-purple-100 text-purple-600">
               <HeartPulse className="w-6 h-6" />
             </div>
-            <span className="text-xs font-medium text-muted-foreground bg-muted px-2 py-1 rounded-full">April to March</span>
           </div>
-          <h3 className="text-muted-foreground text-sm font-medium">Total Sick Leaves Approved</h3>
-          <div className="text-3xl font-bold text-foreground mt-1">{sickLeaveCount}</div>
-          <p className="text-xs text-muted-foreground mt-2">Cumulative total for all employees</p>
+          
+          <div className="grid grid-cols-3 text-center divide-x divide-purple-100">
+            <div>
+              <div className="text-2xl font-bold text-purple-900">{leaveBalances.sickTotal}</div>
+              <div className="text-xs text-purple-600 mt-1">Total Allocated</div>
+            </div>
+            <div>
+              <div className="text-2xl font-bold text-red-600">{leaveBalances.sickTaken}</div>
+              <div className="text-xs text-purple-600 mt-1">Total Taken</div>
+            </div>
+            <div>
+              <div className="text-2xl font-bold text-green-600">{leaveBalances.sickRemaining}</div>
+              <div className="text-xs text-purple-600 mt-1">Total Remaining</div>
+            </div>
+          </div>
         </div>
       </div>
 
