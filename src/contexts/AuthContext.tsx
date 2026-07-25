@@ -23,8 +23,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (email) setCurrentUserEmail(email);
 
     if (authStatus && email && email !== 'admin@example.com') {
-      // Verify access with backend
-      fetch(`${API_BASE_URL}/api/employees`)
+      // Verify access with backend (no-cache to ensure fresh status)
+      fetch(`${API_BASE_URL}/api/employees`, { cache: 'no-store' })
         .then(res => res.json())
         .then(employees => {
           const emp = employees.find((e: any) => e.email === email || e.id === email);
@@ -61,7 +61,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     // Check if it's an employee in the backend
     try {
-      const response = await fetch(`${API_BASE_URL}/api/employees`);
+      const response = await fetch(`${API_BASE_URL}/api/employees`, { cache: 'no-store' });
       if (response.ok) {
         const employees = await response.json();
         const emp = employees.find((e: any) => e.email === email || e.id === email);
