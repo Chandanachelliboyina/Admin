@@ -67,7 +67,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         const emp = employees.find((e: any) => e.email === email || e.id === email);
         if (emp) {
           if (emp.has_access === false) {
-            return { success: false, message: "admin not give grant access" };
+            return { success: false, message: "Admin has not granted access to your account." };
           }
           // Accept any password for mock employee login
           setIsAuthenticated(true);

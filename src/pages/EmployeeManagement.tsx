@@ -64,12 +64,13 @@ export function EmployeeManagement() {
   }, [fetchEmployees]);
 
   const handleDelete = async (id: string) => {
-    if (window.confirm(`Are you sure you want to remove employee ${id}?`)) {
+    if (window.confirm("Are you sure you want to permanently delete this employee? This action cannot be undone.")) {
       try {
         const response = await fetch(`${API_BASE_URL}/api/employees/${id}`, {
           method: 'DELETE',
         });
         if (!response.ok) throw new Error('Failed to delete employee');
+        alert('Employee deleted successfully.');
         fetchEmployees();
       } catch (err) {
         console.error(err);
@@ -92,6 +93,7 @@ export function EmployeeManagement() {
       });
       if (response.ok) {
         setEmployees(employees.map(emp => emp.id === empId ? { ...emp, has_access: !currentAccess } : emp));
+        alert(currentAccess ? 'Access removed successfully.' : 'Access granted successfully.');
       } else {
         alert('Failed to update employee access');
       }

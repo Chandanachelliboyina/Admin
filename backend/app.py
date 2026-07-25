@@ -303,12 +303,24 @@ async def delete_employee(employee_id: str):
     if db is None:
         raise HTTPException(status_code=500, detail="Database connection not active")
 
-    result = await db.employees.delete_one(
-        {"$or": [{"employee_id": employee_id}, {"id": employee_id}]}
-    )
+    query = {"$or": [{"employee_id": employee_id}, {"id": employee_id}]}
+    
+    result = await db.employees.delete_one(query)
     if result.deleted_count == 0:
         raise HTTPException(status_code=404, detail="Employee not found")
-    return {"message": "Employee deleted successfully"}
+
+    clean_id = employee_id.strip()
+    id_query = {"$or": [{"employee_id": clean_id}, {"id": clean_id}]}
+    
+    await db.attendance.delete_many(id_query)
+    await db.activities.delete_many(id_query)
+    await db.leaves.delete_many(id_query)
+    await db.work_updates.delete_many(id_query)
+    await db.work_info.delete_many(id_query)
+    await db.leave_balances.delete_many(id_query)
+    await db.notifications.delete_many(id_query)
+
+    return {"message": "Employee and all associated data deleted successfully"}
 
 
 class ProfilePictureUpload(BaseModel):
