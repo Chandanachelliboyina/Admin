@@ -3,6 +3,7 @@ import { API_BASE_URL } from '../config';
 
 interface AuthContextType {
   isAuthenticated: boolean;
+  currentUserEmail: string | null;
   login: (email: string, password: string) => Promise<{success: boolean, message?: string}>;
   logout: () => void;
   register: (email: string, password: string) => void;
@@ -102,7 +103,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   return (
-    <AuthContext.Provider value={{ isAuthenticated, login, logout, register }}>
+    <AuthContext.Provider value={{ isAuthenticated, currentUserEmail, login, logout, register }}>
       {children}
     </AuthContext.Provider>
   );
