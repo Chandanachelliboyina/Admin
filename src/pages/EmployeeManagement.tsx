@@ -245,7 +245,16 @@ export function EmployeeManagement() {
                     <td className="px-6 py-4 text-foreground">{emp.phone}</td>
                     <td className="px-6 py-4 text-foreground">{emp.location}</td>
                     <td className="px-6 py-4 text-right space-x-2">
-
+                      <button 
+                        onClick={() => {
+                          setEditingEmployee(emp);
+                          setIsEditModalOpen(true);
+                        }}
+                        className="text-blue-600 hover:bg-blue-50 px-3 py-1.5 rounded-md transition-colors text-sm font-medium border border-transparent hover:border-blue-200" 
+                        title="Update Employee"
+                      >
+                        Update
+                      </button>
                       <button 
                         onClick={() => handleToggleAccess(emp.id, emp.has_access !== false)}
                         className={`${emp.has_access !== false ? 'text-amber-600 hover:bg-amber-50 hover:border-amber-200' : 'text-emerald-600 hover:bg-emerald-50 hover:border-emerald-200'} px-3 py-1.5 rounded-md transition-colors text-sm font-medium border border-transparent`} 
