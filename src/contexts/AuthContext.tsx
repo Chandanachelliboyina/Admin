@@ -27,13 +27,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       fetch(`${API_BASE_URL}/api/employees`)
         .then(res => res.json())
         .then(employees => {
-          const emp = employees.find((e: any) => e.email === email);
+          const emp = employees.find((e: any) => e.email === email || e.id === email);
           if (emp && emp.has_access === false) {
             // Revoke access immediately if they are currently logged in
             setIsAuthenticated(false);
             setCurrentUserEmail(null);
             localStorage.removeItem('isAuthenticated');
             localStorage.removeItem('currentUserEmail');
+            // Force reload to kick them out properly
+            window.location.href = '/signin';
           }
         })
         .catch(console.error);
@@ -62,7 +64,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const response = await fetch(`${API_BASE_URL}/api/employees`);
       if (response.ok) {
         const employees = await response.json();
-        const emp = employees.find((e: any) => e.email === email);
+        const emp = employees.find((e: any) => e.email === email || e.id === email);
         if (emp) {
           if (emp.has_access === false) {
             return { success: false, message: "admin not give grant access" };
