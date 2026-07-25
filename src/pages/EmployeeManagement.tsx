@@ -324,7 +324,7 @@ export function EmployeeManagement() {
                   type="submit"
                   className="px-4 py-2 rounded-md bg-primary text-primary-foreground hover:bg-primary/90 transition-colors text-sm font-medium"
                 >
-                  Save Employee
+                  Give Permission
                 </button>
               </div>
             </form>
