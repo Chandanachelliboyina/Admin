@@ -79,6 +79,11 @@ export function EmployeeManagement() {
   };
 
   const handleToggleAccess = async (empId: string, currentAccess: boolean) => {
+    const actionText = currentAccess ? "remove access for" : "grant access to";
+    if (!window.confirm(`Are you sure you want to ${actionText} this employee?`)) {
+      return;
+    }
+
     try {
       const response = await fetch(`${API_BASE_URL}/api/employees/${empId}/access`, {
         method: 'PUT',
