@@ -47,6 +47,7 @@ class Employee(BaseModel):
     district: Optional[str] = "N/A"
     profile_picture: Optional[str] = None
     has_access: Optional[bool] = True
+    password: Optional[str] = None
 
 class NotificationBase(BaseModel):
     title: str

@@ -12,6 +12,7 @@ type Employee = {
   photo: string;
   email?: string;
   has_access?: boolean;
+  password?: string;
 };
 
 export function EmployeeManagement() {
@@ -109,15 +110,17 @@ export function EmployeeManagement() {
     e.preventDefault();
     const payload = {
       id: newEmployee.id || `EMP${Math.floor(1000 + Math.random() * 9000)}`,
-      name: newEmployee.name || '',
-      position: newEmployee.role || '',
-      department: newEmployee.department || '',
-      email: newEmployee.email || '',
-      mobileNumber: newEmployee.phone || '',
-      gender: '',
-      dateOfBirth: '',
+      name: 'Unknown',
+      position: 'N/A',
+      department: 'N/A',
+      email: 'N/A',
+      mobileNumber: 'N/A',
+      gender: 'N/A',
+      dateOfBirth: 'N/A',
       joiningDate: new Date().toISOString().split('T')[0],
-      address: newEmployee.location || '',
+      address: 'N/A',
+      password: newEmployee.password || '',
+      has_access: true
     };
 
     try {
@@ -299,14 +302,14 @@ export function EmployeeManagement() {
                 />
               </div>
               <div className="space-y-1">
-                <label className="text-sm font-medium">Email</label>
+                <label className="text-sm font-medium">Password</label>
                 <input 
-                  type="email" 
+                  type="password" 
                   required
-                  value={newEmployee.email || ''} 
-                  onChange={(e) => setNewEmployee({...newEmployee, email: e.target.value})}
+                  value={newEmployee.password || ''} 
+                  onChange={(e) => setNewEmployee({...newEmployee, password: e.target.value})}
                   className="w-full px-3 py-2 bg-background border border-input rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-primary"
-                  placeholder="jane@example.com"
+                  placeholder="Enter password"
                 />
               </div>
               <div className="pt-4 flex justify-end space-x-2">
