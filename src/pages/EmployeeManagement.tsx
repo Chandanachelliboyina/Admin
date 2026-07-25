@@ -119,7 +119,6 @@ export function EmployeeManagement() {
       dateOfBirth: 'N/A',
       joiningDate: new Date().toISOString().split('T')[0],
       address: 'N/A',
-      password: newEmployee.password || '',
       has_access: true
     };
 
@@ -129,14 +128,19 @@ export function EmployeeManagement() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
       });
-      if (!response.ok) throw new Error('Failed to add employee');
       
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => null);
+        throw new Error(errorData?.detail || 'Failed to add employee');
+      }
+      
+      alert('Employee ID saved successfully! They now have access to their dashboard.');
       setIsAddModalOpen(false);
       setNewEmployee({});
       fetchEmployees();
-    } catch (err) {
+    } catch (err: any) {
       console.error(err);
-      alert('Failed to add employee');
+      alert(err.message || 'Failed to add employee');
     }
   };
 
@@ -299,17 +303,6 @@ export function EmployeeManagement() {
                   onChange={(e) => setNewEmployee({...newEmployee, id: e.target.value})}
                   className="w-full px-3 py-2 bg-background border border-input rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-primary uppercase"
                   placeholder="e.g. EMP1234"
-                />
-              </div>
-              <div className="space-y-1">
-                <label className="text-sm font-medium">Password</label>
-                <input 
-                  type="password" 
-                  required
-                  value={newEmployee.password || ''} 
-                  onChange={(e) => setNewEmployee({...newEmployee, password: e.target.value})}
-                  className="w-full px-3 py-2 bg-background border border-input rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-primary"
-                  placeholder="Enter password"
                 />
               </div>
               <div className="pt-4 flex justify-end space-x-2">

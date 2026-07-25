@@ -7,6 +7,7 @@ import smtplib
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 from contextlib import asynccontextmanager
+import pymongo
 
 from database import connect_to_mongo, close_mongo_connection, get_db, get_previous_db
 
@@ -216,8 +217,11 @@ async def create_employee(employee: Employee):
     doc["phone"] = doc.pop("mobileNumber", "")
     doc["date_of_birth"] = doc.pop("dateOfBirth", "")
     doc["joining_date"] = doc.pop("joiningDate", "")
-    
-    await db.employees.insert_one(doc)
+    try:
+        await db.employees.insert_one(doc)
+    except pymongo.errors.DuplicateKeyError:
+        raise HTTPException(status_code=400, detail=f"Employee ID '{employee.id}' already exists")
+        
     return {"message": "Employee added successfully", "id": employee.id}
 
 
