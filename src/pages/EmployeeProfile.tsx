@@ -165,23 +165,11 @@ export function EmployeeProfile() {
   const [activitySearch, setActivitySearch] = useState('');
   
   // Leave Management State
-  const [isEditingLeaves, setIsEditingLeaves] = useState(false);
   const [leaveFilter, setLeaveFilter] = useState('All');
   const [leaveBalances, setLeaveBalances] = useState({ 
     casualTotal: 12, casualTaken: 0, casualRemaining: 12,
     sickTotal: 12, sickTaken: 0, sickRemaining: 12
   });
-  const [leaveForm, setLeaveForm] = useState({ 
-    casualTotal: 12, casualTaken: 0, casualRemaining: 12,
-    sickTotal: 12, sickTaken: 0, sickRemaining: 12
-  });
-
-  const handleLeaveFormChange = (field: string, value: number) => {
-    setLeaveForm(prev => ({
-      ...prev,
-      [field]: value
-    }));
-  };
 
   const calculateLeaveDays = (start: string, end: string) => {
     const s = new Date(start);
@@ -307,7 +295,6 @@ export function EmployeeProfile() {
     let statusMatch = true;
     const isSunday = new Date(row.date).getDay() === 0;
     const status = isSunday ? 'Holiday' : row.status;
-    const checkIn = isSunday ? '-' : row.checkIn || '-';
 
     if (attendanceFilter === 'Present') {
       statusMatch = status === 'Present';
