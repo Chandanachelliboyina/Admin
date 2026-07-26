@@ -110,6 +110,8 @@ def send_otp_email(request: OTPRequest):
     import os
     from dotenv import load_dotenv
     load_dotenv()
+    
+    print(f"DEBUG: Generated OTP for {request.email} is {request.otp}")
 
     sender_email = os.getenv("SMTP_SENDER_EMAIL")
     sender_password = os.getenv("SMTP_SENDER_PASSWORD")
