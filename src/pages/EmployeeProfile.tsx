@@ -13,6 +13,7 @@ export function EmployeeProfile() {
   
   const [activeTab, setActiveTab] = useState('personal');
   const [selectedMonth, setSelectedMonth] = useState('All Months');
+  const [attendanceFilter, setAttendanceFilter] = useState('All');
   const [attendance, setAttendance] = useState<any[]>([]);
   const [isUploading, setIsUploading] = useState(false);
   const fileInputRef = React.useRef<HTMLInputElement>(null);
@@ -165,6 +166,7 @@ export function EmployeeProfile() {
   
   // Leave Management State
   const [isEditingLeaves, setIsEditingLeaves] = useState(false);
+  const [leaveFilter, setLeaveFilter] = useState('All');
   const [leaveBalances, setLeaveBalances] = useState({ 
     casualTotal: 12, casualTaken: 0, casualRemaining: 12,
     sickTotal: 12, sickTaken: 0, sickRemaining: 12
@@ -181,12 +183,20 @@ export function EmployeeProfile() {
     }));
   };
 
+  const calculateLeaveDays = (start: string, end: string) => {
+    const s = new Date(start);
+    const e = new Date(end);
+    if (isNaN(s.getTime()) || isNaN(e.getTime())) return 0;
+    return Math.max(0, Math.ceil((e.getTime() - s.getTime()) / (1000 * 60 * 60 * 24)) + 1);
+  };
+
   const casualTotal = leaveBalances.casualTotal;
-  const casualTaken = leaveBalances.casualTaken;
-  const casualRemaining = leaveBalances.casualRemaining;
+  const casualTaken = leaves.filter(l => l.status === 'Approved' && l.type?.toLowerCase().includes('casual')).reduce((acc, l) => acc + calculateLeaveDays(l.startDate, l.endDate), 0);
+  const casualRemaining = Math.max(0, casualTotal - casualTaken);
+
   const sickTotal = leaveBalances.sickTotal;
-  const sickTaken = leaveBalances.sickTaken;
-  const sickRemaining = leaveBalances.sickRemaining;
+  const sickTaken = leaves.filter(l => l.status === 'Approved' && l.type?.toLowerCase().includes('sick')).reduce((acc, l) => acc + calculateLeaveDays(l.startDate, l.endDate), 0);
+  const sickRemaining = Math.max(0, sickTotal - sickTaken);
 
 
 
@@ -286,13 +296,29 @@ export function EmployeeProfile() {
   };
 
   const filteredAttendanceData = attendance.filter(row => {
-    if (selectedMonth === 'All Months') return true;
-    const [monthName, year] = selectedMonth.split(' ');
-    const targetMonth = getMonthNumber(monthName);
-    const [rowYear, rowMonth] = row.date.split('-');
-    return parseInt(rowYear) === parseInt(year) && parseInt(rowMonth) === targetMonth;
+    let monthMatch = true;
+    if (selectedMonth !== 'All Months') {
+      const [monthName, year] = selectedMonth.split(' ');
+      const targetMonth = getMonthNumber(monthName);
+      const [rowYear, rowMonth] = row.date.split('-');
+      monthMatch = parseInt(rowYear) === parseInt(year) && parseInt(rowMonth) === targetMonth;
+    }
+
+    let statusMatch = true;
+    const isSunday = new Date(row.date).getDay() === 0;
+    const status = isSunday ? 'Holiday' : row.status;
+    const checkIn = isSunday ? '-' : row.checkIn || '-';
+
+    if (attendanceFilter === 'Present') {
+      statusMatch = status === 'Present';
+    } else if (attendanceFilter === 'Absent') {
+      statusMatch = status === 'Absent';
+    }
+
+    return monthMatch && statusMatch;
   });
 
+  const filteredLeaves = leaves.filter(l => leaveFilter === 'All' || l.status === leaveFilter);
 
   const handleExportCSV = () => {
     const headers = ['Date', 'Employee Name', 'Employee ID', 'Check In', 'Check Out', 'Hours', 'Status', 'Start Location', 'End Location'];
@@ -616,6 +642,15 @@ export function EmployeeProfile() {
                 </h2>
                 <div className="flex items-center space-x-3">
                   <select 
+                    value={attendanceFilter}
+                    onChange={(e) => setAttendanceFilter(e.target.value)}
+                    className="bg-background border border-input text-sm rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-primary"
+                  >
+                    <option value="All">All Status</option>
+                    <option value="Present">Present</option>
+                    <option value="Absent">Absent</option>
+                  </select>
+                  <select 
                     value={selectedMonth}
                     onChange={(e) => setSelectedMonth(e.target.value)}
                     className="bg-background border border-input text-sm rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-primary"
@@ -669,7 +704,7 @@ export function EmployeeProfile() {
                     {filteredAttendanceData.length > 0 ? (
                       filteredAttendanceData.map((row, i) => {
                         const isSunday = new Date(row.date).getDay() === 0;
-                        const status = isSunday ? 'Holiday' : row.status;
+                        let status = isSunday ? 'Holiday' : row.status;
                         const checkIn = isSunday ? '-' : row.checkIn || '-';
                         const checkOut = isSunday ? '-' : row.checkOut || '-';
                         const hrs = isSunday ? '-' : row.hrs || '-';
@@ -843,49 +878,6 @@ export function EmployeeProfile() {
                   </div>
                 </div>
                 <div>
-                  {isEditingLeaves ? (
-                    <div className="flex space-x-2">
-                      <button 
-                        onClick={async () => {
-                          try {
-                            const newBalances = {
-                                casualTotal: leaveForm.casualTotal, casualTaken: leaveForm.casualTaken, casualRemaining: leaveForm.casualRemaining,
-                                sickTotal: leaveForm.sickTotal, sickTaken: leaveForm.sickTaken, sickRemaining: leaveForm.sickRemaining
-                            };
-                            await fetch(`${API_BASE_URL}/api/employees/${id}/leave-balances`, {
-                                method: 'PUT',
-                                headers: { 'Content-Type': 'application/json' },
-                                body: JSON.stringify(newBalances)
-                            });
-                            setLeaveBalances(newBalances);
-                            setIsEditingLeaves(false);
-                          } catch (err) {
-                            console.error(err);
-                            alert('Failed to save leave balances');
-                          }
-                        }}
-                        className="bg-primary text-primary-foreground px-4 py-2 rounded-lg text-sm font-medium hover:bg-primary/90 transition-colors"
-                      >
-                        Save
-                      </button>
-                      <button 
-                        onClick={() => setIsEditingLeaves(false)}
-                        className="bg-muted text-muted-foreground px-4 py-2 rounded-lg text-sm font-medium hover:bg-muted/80 transition-colors"
-                      >
-                        Cancel
-                      </button>
-                    </div>
-                  ) : (
-                    <button 
-                      onClick={() => {
-                        setLeaveForm({ ...leaveBalances });
-                        setIsEditingLeaves(true);
-                      }}
-                      className="bg-muted text-foreground px-4 py-2 rounded-lg text-sm font-medium hover:bg-muted/80 transition-colors"
-                    >
-                      Edit Balances
-                    </button>
-                  )}
                 </div>
               </div>
 
@@ -897,37 +889,20 @@ export function EmployeeProfile() {
                     <p className="text-blue-500/80 text-sm">April to March</p>
                   </div>
                   
-                  {isEditingLeaves ? (
-                    <div className="grid grid-cols-3 text-center gap-2">
-                      <div>
-                        <input type="number" className="w-16 text-center border border-blue-200 rounded-md text-xl font-bold text-blue-900 bg-white shadow-inner" value={leaveForm.casualTotal} onChange={(e) => handleLeaveFormChange('casualTotal', parseInt(e.target.value) || 0)} />
-                        <div className="text-xs text-blue-600 mt-1">Total</div>
-                      </div>
-                      <div>
-                        <input type="number" className="w-16 text-center border border-blue-200 rounded-md text-xl font-bold text-red-600 bg-white shadow-inner" value={leaveForm.casualTaken} onChange={(e) => handleLeaveFormChange('casualTaken', parseInt(e.target.value) || 0)} />
-                        <div className="text-xs text-blue-600 mt-1">Taken</div>
-                      </div>
-                      <div>
-                        <input type="number" className="w-16 text-center border border-blue-200 rounded-md text-xl font-bold text-green-600 bg-white shadow-inner" value={leaveForm.casualRemaining} onChange={(e) => handleLeaveFormChange('casualRemaining', parseInt(e.target.value) || 0)} />
-                        <div className="text-xs text-blue-600 mt-1">Remaining</div>
-                      </div>
+                  <div className="grid grid-cols-3 text-center divide-x divide-blue-100">
+                    <div>
+                      <div className="text-2xl font-bold text-blue-900">{casualTotal}</div>
+                      <div className="text-xs text-blue-600 mt-1">Total</div>
                     </div>
-                  ) : (
-                    <div className="grid grid-cols-3 text-center divide-x divide-blue-100">
-                      <div>
-                        <div className="text-2xl font-bold text-blue-900">{casualTotal}</div>
-                        <div className="text-xs text-blue-600 mt-1">Total</div>
-                      </div>
-                      <div>
-                        <div className="text-2xl font-bold text-red-600">{casualTaken}</div>
-                        <div className="text-xs text-blue-600 mt-1">Taken</div>
-                      </div>
-                      <div>
-                        <div className="text-2xl font-bold text-green-600">{casualRemaining}</div>
-                        <div className="text-xs text-blue-600 mt-1">Remaining</div>
-                      </div>
+                    <div>
+                      <div className="text-2xl font-bold text-red-600">{casualTaken}</div>
+                      <div className="text-xs text-blue-600 mt-1">Taken</div>
                     </div>
-                  )}
+                    <div>
+                      <div className="text-2xl font-bold text-green-600">{casualRemaining}</div>
+                      <div className="text-xs text-blue-600 mt-1">Remaining</div>
+                    </div>
+                  </div>
                 </div>
 
                 {/* Sick Leaves Card */}
@@ -937,47 +912,42 @@ export function EmployeeProfile() {
                     <p className="text-purple-500/80 text-sm">April to March</p>
                   </div>
                   
-                  {isEditingLeaves ? (
-                    <div className="grid grid-cols-3 text-center gap-2">
-                      <div>
-                        <input type="number" className="w-16 text-center border border-purple-200 rounded-md text-xl font-bold text-purple-900 bg-white shadow-inner" value={leaveForm.sickTotal} onChange={(e) => handleLeaveFormChange('sickTotal', parseInt(e.target.value) || 0)} />
-                        <div className="text-xs text-purple-600 mt-1">Total</div>
-                      </div>
-                      <div>
-                        <input type="number" className="w-16 text-center border border-purple-200 rounded-md text-xl font-bold text-red-600 bg-white shadow-inner" value={leaveForm.sickTaken} onChange={(e) => handleLeaveFormChange('sickTaken', parseInt(e.target.value) || 0)} />
-                        <div className="text-xs text-purple-600 mt-1">Taken</div>
-                      </div>
-                      <div>
-                        <input type="number" className="w-16 text-center border border-purple-200 rounded-md text-xl font-bold text-green-600 bg-white shadow-inner" value={leaveForm.sickRemaining} onChange={(e) => handleLeaveFormChange('sickRemaining', parseInt(e.target.value) || 0)} />
-                        <div className="text-xs text-purple-600 mt-1">Remaining</div>
-                      </div>
+                  <div className="grid grid-cols-3 text-center divide-x divide-purple-100">
+                    <div>
+                      <div className="text-2xl font-bold text-purple-900">{sickTotal}</div>
+                      <div className="text-xs text-purple-600 mt-1">Total</div>
                     </div>
-                  ) : (
-                    <div className="grid grid-cols-3 text-center divide-x divide-purple-100">
-                      <div>
-                        <div className="text-2xl font-bold text-purple-900">{sickTotal}</div>
-                        <div className="text-xs text-purple-600 mt-1">Total</div>
-                      </div>
-                      <div>
-                        <div className="text-2xl font-bold text-red-600">{sickTaken}</div>
-                        <div className="text-xs text-purple-600 mt-1">Taken</div>
-                      </div>
-                      <div>
-                        <div className="text-2xl font-bold text-green-600">{sickRemaining}</div>
-                        <div className="text-xs text-purple-600 mt-1">Remaining</div>
-                      </div>
+                    <div>
+                      <div className="text-2xl font-bold text-red-600">{sickTaken}</div>
+                      <div className="text-xs text-purple-600 mt-1">Taken</div>
                     </div>
-                  )}
+                    <div>
+                      <div className="text-2xl font-bold text-green-600">{sickRemaining}</div>
+                      <div className="text-xs text-purple-600 mt-1">Remaining</div>
+                    </div>
+                  </div>
                 </div>
               </div>
 
               <div className="space-y-4">
-                <h3 className="text-lg font-bold text-foreground">Leave Letters</h3>
-                {leaves.length === 0 ? (
+                <div className="flex justify-between items-center mb-4">
+                  <h3 className="text-lg font-bold text-foreground">Leave Letters</h3>
+                  <select 
+                    value={leaveFilter}
+                    onChange={(e) => setLeaveFilter(e.target.value)}
+                    className="bg-background border border-input text-sm rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-primary"
+                  >
+                    <option value="All">All Requests</option>
+                    <option value="Pending">Pending</option>
+                    <option value="Approved">Approved</option>
+                    <option value="Rejected">Rejected</option>
+                  </select>
+                </div>
+                {filteredLeaves.length === 0 ? (
                   <div className="py-8 text-center text-muted-foreground border border-dashed border-border rounded-lg bg-muted/20">
                     No leave requests found.
                   </div>
-                ) : leaves.map(l => (
+                ) : filteredLeaves.map(l => (
                   <div key={l.id} className="p-4 border border-border rounded-lg bg-background">
                     <div className="flex justify-between items-start">
                       <div>
@@ -1017,6 +987,17 @@ export function EmployeeProfile() {
                           });
                           setLeaves(leaves.map(x => x.id === l.id ? { ...x, status: 'Rejected' } : x));
                         }} className="p-2 bg-rose-50 text-rose-600 hover:bg-rose-100 rounded-md" title="Reject"><X className="w-4 h-4"/></button>
+
+                        <button onClick={async () => {
+                          if (!confirm('Are you sure you want to delete this leave request?')) return;
+                          try {
+                            await fetch(`${API_BASE_URL}/api/leaves/${l.id}`, { method: 'DELETE' });
+                            setLeaves(leaves.filter(x => x.id !== l.id));
+                          } catch (e) {
+                            console.error(e);
+                            alert('Failed to delete leave request');
+                          }
+                        }} className="p-2 bg-red-50 text-red-600 hover:bg-red-100 rounded-md" title="Delete"><Trash2 className="w-4 h-4"/></button>
                       </div>
                     </div>
                   </div>

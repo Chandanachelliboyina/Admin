@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { NavLink, useNavigate } from 'react-router-dom';
-import { Users, MapPin, LayoutDashboard, LogOut, Bell, Clock } from 'lucide-react';
+import { Users, MapPin, LayoutDashboard, LogOut, Bell, Clock, CalendarDays } from 'lucide-react';
 import { clsx, type ClassValue } from 'clsx';
 import { twMerge } from 'tailwind-merge';
 import { useAuth } from '../../contexts/AuthContext';
@@ -12,6 +12,7 @@ export function cn(...inputs: ClassValue[]) {
 const navItems = [
   { icon: LayoutDashboard, label: 'Dashboard', to: '/' },
   { icon: Users, label: 'Employee Management', to: '/employees' },
+  { icon: CalendarDays, label: 'Leave Management', to: '/leave-management' },
   { icon: Bell, label: 'Notifications', to: '/notifications' },
   { icon: MapPin, label: 'Attendance Tracking', to: '/attendance' },
 ];
