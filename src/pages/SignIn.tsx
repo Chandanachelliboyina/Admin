@@ -71,7 +71,7 @@ export function SignIn() {
           <div className="space-y-2">
             <div className="flex justify-between items-center">
               <label className="text-sm font-medium text-foreground">Password</label>
-              <a href="#" className="text-xs text-blue-600 hover:underline">Forgot password?</a>
+              <Link to="/forgot-password" className="text-xs text-blue-600 hover:underline">Forgot password?</Link>
             </div>
             <div className="relative">
               <Lock className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />

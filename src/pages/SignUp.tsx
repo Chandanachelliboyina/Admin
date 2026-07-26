@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { Mail, Lock, User, ArrowRight } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
@@ -44,6 +44,12 @@ export function SignUp() {
 
     if (!allowedEmails.includes(emailLower)) {
       setEmailError('Unauthorized: Only authorized admin emails can create an account.');
+      return;
+    }
+
+    const storedData = localStorage.getItem('registeredUser');
+    if (storedData) {
+      setEmailError('We already created an account please sign in.');
       return;
     }
 
