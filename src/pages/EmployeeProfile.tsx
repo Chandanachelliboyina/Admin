@@ -171,12 +171,6 @@ export function EmployeeProfile() {
     sickTotal: 12, sickTaken: 0, sickRemaining: 12
   });
 
-  const calculateLeaveDays = (start: string, end: string) => {
-    const s = new Date(start);
-    const e = new Date(end);
-    if (isNaN(s.getTime()) || isNaN(e.getTime())) return 0;
-    return Math.max(0, Math.ceil((e.getTime() - s.getTime()) / (1000 * 60 * 60 * 24)) + 1);
-  };
 
   const casualTotal = leaveBalances.casualTotal;
   const casualTaken = leaveBalances.casualTaken;
