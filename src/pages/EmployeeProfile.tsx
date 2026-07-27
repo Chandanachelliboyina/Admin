@@ -179,12 +179,12 @@ export function EmployeeProfile() {
   };
 
   const casualTotal = leaveBalances.casualTotal;
-  const casualTaken = leaves.filter(l => l.status === 'Approved' && l.type?.toLowerCase().includes('casual')).reduce((acc, l) => acc + calculateLeaveDays(l.startDate, l.endDate), 0);
-  const casualRemaining = Math.max(0, casualTotal - casualTaken);
+  const casualTaken = leaveBalances.casualTaken;
+  const casualRemaining = leaveBalances.casualRemaining;
 
   const sickTotal = leaveBalances.sickTotal;
-  const sickTaken = leaves.filter(l => l.status === 'Approved' && l.type?.toLowerCase().includes('sick')).reduce((acc, l) => acc + calculateLeaveDays(l.startDate, l.endDate), 0);
-  const sickRemaining = Math.max(0, sickTotal - sickTaken);
+  const sickTaken = leaveBalances.sickTaken;
+  const sickRemaining = leaveBalances.sickRemaining;
 
 
 
