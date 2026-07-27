@@ -66,6 +66,16 @@ class OTPRequest(BaseModel):
     email: str
     otp: str
 
+class HolidayBase(BaseModel):
+    name: str
+    from_date: str
+    to_date: str
+    type: str
+
+class Holiday(HolidayBase):
+    id: str
+    created_at: str
+
 # ─── In-Memory Fallback ───────────────────────────────────────
 
 
@@ -425,7 +435,22 @@ async def get_employee_attendance(employee_id: str):
         if hrs_worked == "N/A":
             hrs_worked = att.get("hrs", "N/A")
             
-        if check_in_time != "N/A" and check_out_time != "N/A":
+        # Holiday override check for single employee attendance
+        today_str = att.get("login_date", att.get("date", "N/A"))
+        is_holiday = False
+        if today_str != "N/A":
+            main_db = get_previous_db()
+            if main_db is not None:
+                holiday = await main_db.holidays.find_one({
+                    "from_date": {"$lte": today_str},
+                    "to_date": {"$gte": today_str}
+                })
+                if holiday:
+                    is_holiday = True
+
+        if is_holiday:
+            status_val = "Holiday"
+        elif check_in_time != "N/A" and check_out_time != "N/A":
             status_val = "Present"
         elif check_in_time != "N/A" and check_out_time == "N/A":
             status_val = "Check-in (Absent)"
@@ -549,7 +574,22 @@ async def get_all_attendance():
             if emp_doc:
                 emp_name = emp_doc.get("full_name", emp_doc.get("name", "Unknown"))
                 
-        if check_in_time != "N/A" and check_out_time != "N/A":
+        # Holiday override check for all attendance
+        today_str = att.get("login_date", att.get("date", "N/A"))
+        is_holiday = False
+        if today_str != "N/A":
+            main_db = get_previous_db()
+            if main_db is not None:
+                holiday = await main_db.holidays.find_one({
+                    "from_date": {"$lte": today_str},
+                    "to_date": {"$gte": today_str}
+                })
+                if holiday:
+                    is_holiday = True
+
+        if is_holiday:
+            status_val = "Holiday"
+        elif check_in_time != "N/A" and check_out_time != "N/A":
             status_val = "Present"
         elif check_in_time != "N/A" and check_out_time == "N/A":
             status_val = "Check-in (Absent)"
@@ -1113,6 +1153,71 @@ async def undo_delete_notification(notif_id: str):
     from bson.objectid import ObjectId
     await db.notifications.update_one({"_id": ObjectId(notif_id)}, {"$set": {"isDeleted": False}})
     return {"message": "Notification restored"}
+
+
+# ─── Holidays API ─────────────────────────────────────────────
+@app.get("/api/holidays")
+async def get_holidays():
+    db = get_previous_db()
+    if db is None: return []
+    cursor = db.holidays.find().sort("from_date", 1)
+    holidays = []
+    async for doc in cursor:
+        holidays.append({
+            "id": str(doc["_id"]),
+            "name": doc.get("name"),
+            "from_date": doc.get("from_date"),
+            "to_date": doc.get("to_date"),
+            "type": doc.get("type"),
+            "created_at": doc.get("created_at")
+        })
+    return holidays
+
+@app.post("/api/holidays")
+async def create_holiday(holiday: HolidayBase):
+    db = get_previous_db()
+    if db is None: return {"message": "Mock mode"}
+    doc = {
+        "name": holiday.name,
+        "from_date": holiday.from_date,
+        "to_date": holiday.to_date,
+        "type": holiday.type,
+        "created_at": datetime.now().isoformat()
+    }
+    result = await db.holidays.insert_one(doc)
+    return {"message": "Holiday created successfully", "id": str(result.inserted_id)}
+
+@app.delete("/api/holidays/{holiday_id}")
+async def delete_holiday(holiday_id: str):
+    db = get_previous_db()
+    if db is None: return {"message": "Mock mode"}
+    from bson.objectid import ObjectId
+    await db.holidays.delete_one({"_id": ObjectId(holiday_id)})
+    return {"message": "Holiday deleted"}
+
+@app.get("/api/holidays/active")
+async def check_active_holiday(date: Optional[str] = None):
+    db = get_previous_db()
+    if db is None: return {"isHoliday": False}
+    
+    target_date = date
+    if not target_date:
+        import pytz
+        ist_tz = pytz.timezone('Asia/Kolkata')
+        target_date = datetime.now(ist_tz).strftime('%Y-%m-%d')
+        
+    holiday = await db.holidays.find_one({
+        "from_date": {"$lte": target_date},
+        "to_date": {"$gte": target_date}
+    })
+    
+    if holiday:
+        return {
+            "isHoliday": True,
+            "holidayName": holiday.get("name"),
+            "holidayType": holiday.get("type")
+        }
+    return {"isHoliday": False}
 
 
 if __name__ == "__main__":

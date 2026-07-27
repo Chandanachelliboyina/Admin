@@ -70,7 +70,7 @@ export function EmployeeProfile() {
         if (notifRes.ok) {
           const allNotifs = await notifRes.json();
           setNotifications(allNotifs.filter((n: any) => 
-            n.target_type === 'all' || 
+            String(n.target_type || '').trim().toLowerCase() === 'all' || 
             String(n.employee_id || '').trim().toLowerCase() === String(id).trim().toLowerCase()
           ));
         }
@@ -248,7 +248,7 @@ export function EmployeeProfile() {
       if (notifRes.ok) {
         const allNotifs = await notifRes.json();
         setNotifications(allNotifs.filter((n: any) => 
-          n.target_type === 'all' || 
+          String(n.target_type || '').trim().toLowerCase() === 'all' || 
           String(n.employee_id || '').trim().toLowerCase() === String(id).trim().toLowerCase()
         ));
       }

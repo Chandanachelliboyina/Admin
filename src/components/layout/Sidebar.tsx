@@ -13,6 +13,7 @@ const navItems = [
   { icon: LayoutDashboard, label: 'Dashboard', to: '/' },
   { icon: Users, label: 'Employee Management', to: '/employees' },
   { icon: CalendarDays, label: 'Leave Management', to: '/leave-management' },
+  { icon: CalendarDays, label: 'Holiday Management', to: '/holidays' },
   { icon: Bell, label: 'Notifications', to: '/notifications' },
   { icon: MapPin, label: 'Attendance Tracking', to: '/attendance' },
 ];

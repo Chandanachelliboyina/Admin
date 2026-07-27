@@ -5,6 +5,7 @@ import { EmployeeManagement } from './pages/EmployeeManagement';
 import { EmployeeProfile } from './pages/EmployeeProfile';
 import { AttendanceTracking } from './pages/AttendanceTracking';
 import { LeaveManagement } from './pages/LeaveManagement';
+import { HolidayManagement } from './pages/HolidayManagement';
 import { Notifications } from './pages/Notifications';
 import { SignIn } from './pages/SignIn';
 import { SignUp } from './pages/SignUp';
@@ -32,6 +33,7 @@ function App() {
               <Route path="employees/:id" element={<EmployeeProfile />} />
               <Route path="attendance" element={<AttendanceTracking />} />
               <Route path="leave-management" element={<LeaveManagement />} />
+              <Route path="holidays" element={<HolidayManagement />} />
               <Route path="notifications" element={<Notifications />} />
             </Route>
           </Route>

@@ -68,7 +68,7 @@ export function AttendanceTracking() {
   
   const filteredRecords = records.filter(record => 
     record.date === todayStr && 
-    record.checkIn !== 'N/A' &&
+    (record.checkIn !== 'N/A' || record.status === 'Holiday') &&
     (record.empName.toLowerCase().includes(searchTerm.toLowerCase()) ||
      record.empId.toLowerCase().includes(searchTerm.toLowerCase()))
   );
@@ -155,6 +155,7 @@ export function AttendanceTracking() {
                         <span className={`px-2 py-1 rounded-full text-xs font-medium ${
                           record.status === 'Present' ? 'bg-emerald-100 text-emerald-700 border border-emerald-200' : 
                           record.status === 'Absent' ? 'bg-rose-100 text-rose-700 border border-rose-200' :
+                          record.status === 'Holiday' ? 'bg-purple-100 text-purple-700 border border-purple-200' :
                           'bg-yellow-100 text-yellow-700 border border-yellow-200'
                         }`}>
                           {record.status}
