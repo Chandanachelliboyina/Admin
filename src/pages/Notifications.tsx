@@ -7,7 +7,7 @@ export function Notifications() {
   const [notifications, setNotifications] = useState<any[]>([]);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [currentNotif, setCurrentNotif] = useState<any | null>(null);
-  const [formData, setFormData] = useState({ title: '', message: '' });
+  const [formData, setFormData] = useState({ title: '', message: '', target_type: 'all', employee_id: '' });
   const [isLoading, setIsLoading] = useState(true);
 
   const fetchNotifications = async () => {
@@ -30,10 +30,15 @@ export function Notifications() {
   const handleOpenModal = (notif?: any) => {
     if (notif) {
       setCurrentNotif(notif);
-      setFormData({ title: notif.title, message: notif.message });
+      setFormData({ 
+        title: notif.title, 
+        message: notif.message, 
+        target_type: notif.target_type || 'all', 
+        employee_id: notif.employee_id || '' 
+      });
     } else {
       setCurrentNotif(null);
-      setFormData({ title: '', message: '' });
+      setFormData({ title: '', message: '', target_type: 'all', employee_id: '' });
     }
     setIsModalOpen(true);
   };
@@ -41,7 +46,7 @@ export function Notifications() {
   const handleCloseModal = () => {
     setIsModalOpen(false);
     setCurrentNotif(null);
-    setFormData({ title: '', message: '' });
+    setFormData({ title: '', message: '', target_type: 'all', employee_id: '' });
   };
 
   const handleSave = async (e: React.FormEvent) => {
@@ -57,19 +62,20 @@ export function Notifications() {
           body: JSON.stringify({
             title: formData.title,
             message: formData.message,
-            target_type: currentNotif.target_type || 'all',
-            employee_id: currentNotif.employee_id
+            target_type: formData.target_type,
+            employee_id: formData.target_type === 'individual' ? formData.employee_id : null
           })
         });
       } else {
-        // Create (always broadcast from this global page)
+        // Create 
         await fetch(`${API_BASE_URL}/api/notifications`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             title: formData.title,
             message: formData.message,
-            target_type: 'all'
+            target_type: formData.target_type,
+            employee_id: formData.target_type === 'individual' ? formData.employee_id : null
           })
         });
       }
@@ -214,6 +220,48 @@ export function Notifications() {
                   className="w-full px-3 py-2 bg-background border border-border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary/50"
                 />
               </div>
+              <div className="space-y-2">
+                <label className="text-sm font-medium text-foreground">Target Audience</label>
+                <div className="flex gap-4">
+                  <label className="flex items-center space-x-2 text-sm cursor-pointer">
+                    <input
+                      type="radio"
+                      name="target_type"
+                      value="all"
+                      checked={formData.target_type === 'all'}
+                      onChange={(e) => setFormData({ ...formData, target_type: e.target.value })}
+                      className="text-primary focus:ring-primary h-4 w-4"
+                    />
+                    <span>All Employees</span>
+                  </label>
+                  <label className="flex items-center space-x-2 text-sm cursor-pointer">
+                    <input
+                      type="radio"
+                      name="target_type"
+                      value="individual"
+                      checked={formData.target_type === 'individual'}
+                      onChange={(e) => setFormData({ ...formData, target_type: e.target.value })}
+                      className="text-primary focus:ring-primary h-4 w-4"
+                    />
+                    <span>Individual Employee</span>
+                  </label>
+                </div>
+              </div>
+
+              {formData.target_type === 'individual' && (
+                <div className="space-y-2 animate-in fade-in slide-in-from-top-2">
+                  <label className="text-sm font-medium text-foreground">Employee ID</label>
+                  <input
+                    type="text"
+                    required
+                    value={formData.employee_id}
+                    onChange={(e) => setFormData({ ...formData, employee_id: e.target.value })}
+                    placeholder="Enter Employee ID"
+                    className="w-full px-3 py-2 bg-background border border-border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary/50"
+                  />
+                </div>
+              )}
+              
               <div className="space-y-2">
                 <label className="text-sm font-medium text-foreground">Message</label>
                 <textarea
