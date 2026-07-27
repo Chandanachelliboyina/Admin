@@ -1100,25 +1100,67 @@ async def get_notifications(include_deleted: bool = False):
 async def create_notification(notif: NotificationBase):
     db = get_previous_db()
     if db is None: return {"message": "Mock mode"}
-    doc = {
-        "title": notif.title,
-        "message": notif.message,
-        "target_type": notif.target_type,
-        "targetType": notif.target_type,
-        "employee_id": notif.employee_id,
-        "employeeId": notif.employee_id,
-        "created_at": datetime.now(),
-        "isDeleted": False
-    }
-    result = await db.notifications.insert_one(doc)
-    return {
-        "id": str(result.inserted_id),
-        "title": doc["title"],
-        "message": doc["message"],
-        "target_type": doc["target_type"],
-        "employee_id": doc["employee_id"],
-        "date": doc["created_at"].strftime("%b %d, %Y, %I:%M %p")
-    }
+    
+    if notif.target_type == "all":
+        employees_cursor = db.employees.find({})
+        inserted_docs = []
+        async for emp in employees_cursor:
+            emp_id = emp.get("employee_id") or emp.get("id")
+            if emp_id:
+                inserted_docs.append({
+                    "title": notif.title,
+                    "message": notif.message,
+                    "target_type": "individual",
+                    "targetType": "individual",
+                    "employee_id": emp_id,
+                    "employeeId": emp_id,
+                    "created_at": datetime.now(),
+                    "isDeleted": False
+                })
+        
+        if inserted_docs:
+            await db.notifications.insert_many(inserted_docs)
+            # Create a "global" one just for the admin UI record
+            global_doc = {
+                "title": notif.title,
+                "message": notif.message,
+                "target_type": "all",
+                "targetType": "all",
+                "employee_id": None,
+                "employeeId": None,
+                "created_at": datetime.now(),
+                "isDeleted": False
+            }
+            result = await db.notifications.insert_one(global_doc)
+            return {
+                "id": str(result.inserted_id),
+                "title": global_doc["title"],
+                "message": global_doc["message"],
+                "target_type": global_doc["target_type"],
+                "employee_id": global_doc["employee_id"],
+                "date": global_doc["created_at"].strftime("%b %d, %Y, %I:%M %p")
+            }
+        return {"message": "No employees found"}
+    else:
+        doc = {
+            "title": notif.title,
+            "message": notif.message,
+            "target_type": notif.target_type,
+            "targetType": notif.target_type,
+            "employee_id": notif.employee_id,
+            "employeeId": notif.employee_id,
+            "created_at": datetime.now(),
+            "isDeleted": False
+        }
+        result = await db.notifications.insert_one(doc)
+        return {
+            "id": str(result.inserted_id),
+            "title": doc["title"],
+            "message": doc["message"],
+            "target_type": doc["target_type"],
+            "employee_id": doc["employee_id"],
+            "date": doc["created_at"].strftime("%b %d, %Y, %I:%M %p")
+        }
 
 @app.put("/api/notifications/{notif_id}")
 async def update_notification(notif_id: str, notif: NotificationBase):
