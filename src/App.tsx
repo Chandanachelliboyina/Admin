@@ -11,6 +11,7 @@ import { SignIn } from './pages/SignIn';
 import { SignUp } from './pages/SignUp';
 import { ForgotPassword } from './pages/ForgotPassword';
 import { VerifyEmail } from './pages/VerifyEmail';
+import { PasswordResetRequests } from './pages/PasswordResetRequests';
 import { AuthProvider } from './contexts/AuthContext';
 import { ProtectedRoute } from './components/layout/ProtectedRoute';
 
@@ -35,6 +36,7 @@ function App() {
               <Route path="leave-management" element={<LeaveManagement />} />
               <Route path="holidays" element={<HolidayManagement />} />
               <Route path="notifications" element={<Notifications />} />
+              <Route path="password-reset-requests" element={<PasswordResetRequests />} />
             </Route>
           </Route>
         </Routes>

@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { NavLink, useNavigate } from 'react-router-dom';
-import { Users, MapPin, LayoutDashboard, LogOut, Bell, Clock, CalendarDays } from 'lucide-react';
+import { Users, MapPin, LayoutDashboard, LogOut, Bell, Clock, CalendarDays, KeyRound } from 'lucide-react';
 import { clsx, type ClassValue } from 'clsx';
 import { twMerge } from 'tailwind-merge';
 import { useAuth } from '../../contexts/AuthContext';
@@ -16,6 +16,7 @@ const navItems = [
   { icon: CalendarDays, label: 'Holiday Management', to: '/holidays' },
   { icon: Bell, label: 'Notifications', to: '/notifications' },
   { icon: MapPin, label: 'Attendance Tracking', to: '/attendance' },
+  { icon: KeyRound, label: 'Password Resets', to: '/password-reset-requests', badgeKey: 'passwordResets' },
 ];
 
 function LiveClock() {
@@ -51,6 +52,23 @@ function LiveClock() {
 export function Sidebar() {
   const { logout } = useAuth();
   const navigate = useNavigate();
+  const [pendingResets, setPendingResets] = useState(0);
+
+  useEffect(() => {
+    const fetchPendingResets = async () => {
+      try {
+        const { API_BASE_URL: baseUrl } = await import('../../config');
+        const res = await fetch(`${baseUrl}/api/password-reset-requests?status=pending`);
+        if (res.ok) {
+          const data = await res.json();
+          setPendingResets(data.length);
+        }
+      } catch { /* ignore */ }
+    };
+    fetchPendingResets();
+    const interval = setInterval(fetchPendingResets, 30000);
+    return () => clearInterval(interval);
+  }, []);
 
   const handleLogout = () => {
     logout();
@@ -83,7 +101,12 @@ export function Sidebar() {
             }
           >
             <item.icon className="w-5 h-5" />
-            <span>{item.label}</span>
+            <span className="flex-1">{item.label}</span>
+            {item.badgeKey === 'passwordResets' && pendingResets > 0 && (
+              <span className="inline-flex items-center justify-center min-w-[20px] h-5 px-1.5 rounded-full bg-amber-500 text-white text-[10px] font-bold animate-pulse">
+                {pendingResets}
+              </span>
+            )}
           </NavLink>
         ))}
       </nav>

@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { ArrowLeft, User, Mail, Phone, MapPin, Briefcase, Calendar, Info, Map, Building, Edit2, X, Download, Printer, Image as ImageIcon, Activity, Trash2, Search, CalendarRange, Bell, Plus, Check } from 'lucide-react';
+import { ArrowLeft, User, Mail, Phone, MapPin, Briefcase, Calendar, Info, Map, Building, Edit2, X, Download, Printer, Image as ImageIcon, Activity, Trash2, Search, CalendarRange, Bell, Plus, Check, BarChart3 } from 'lucide-react';
 import { API_BASE_URL } from '../config';
 
 export function EmployeeProfile() {
@@ -170,6 +170,9 @@ export function EmployeeProfile() {
     casualTotal: 12, casualTaken: 0, casualRemaining: 12,
     sickTotal: 12, sickTaken: 0, sickRemaining: 12
   });
+  const [monthlyLeaveReport, setMonthlyLeaveReport] = useState<any[]>([]);
+  const [monthlyReportLoading, setMonthlyReportLoading] = useState(false);
+  const [leaveReportView, setLeaveReportView] = useState<'list' | 'monthly'>('list');
 
 
   const casualTotal = leaveBalances.casualTotal;
@@ -858,7 +861,36 @@ export function EmployeeProfile() {
                     Sundays are automatically declared as holidays and excluded from leave duration.
                   </div>
                 </div>
-                <div>
+                {/* Sub-tab toggle */}
+                <div className="flex gap-1 bg-muted rounded-lg p-1 self-start">
+                  <button
+                    onClick={() => setLeaveReportView('list')}
+                    className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-semibold transition-all ${
+                      leaveReportView === 'list' ? 'bg-card shadow text-foreground' : 'text-muted-foreground hover:text-foreground'
+                    }`}
+                  >
+                    <Calendar className="w-3.5 h-3.5" />
+                    Leave Letters
+                  </button>
+                  <button
+                    onClick={async () => {
+                      setLeaveReportView('monthly');
+                      if (monthlyLeaveReport.length === 0) {
+                        setMonthlyReportLoading(true);
+                        try {
+                          const res = await fetch(`${API_BASE_URL}/api/employees/${id}/leaves/monthly-report`);
+                          if (res.ok) setMonthlyLeaveReport(await res.json());
+                        } catch (e) { console.error(e); }
+                        finally { setMonthlyReportLoading(false); }
+                      }
+                    }}
+                    className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-semibold transition-all ${
+                      leaveReportView === 'monthly' ? 'bg-card shadow text-foreground' : 'text-muted-foreground hover:text-foreground'
+                    }`}
+                  >
+                    <BarChart3 className="w-3.5 h-3.5" />
+                    Monthly Report
+                  </button>
                 </div>
               </div>
 
@@ -910,6 +942,106 @@ export function EmployeeProfile() {
                 </div>
               </div>
 
+              {/* ── Monthly Report Sub-view ── */}
+              {leaveReportView === 'monthly' && (
+                <div className="space-y-4">
+                  {monthlyReportLoading ? (
+                    <div className="flex items-center justify-center py-10 gap-3">
+                      <div className="w-6 h-6 border-2 border-primary/30 border-t-primary rounded-full animate-spin" />
+                      <span className="text-sm text-muted-foreground">Generating monthly report...</span>
+                    </div>
+                  ) : monthlyLeaveReport.length === 0 ? (
+                    <div className="py-10 text-center text-muted-foreground border border-dashed border-border rounded-xl bg-muted/10">
+                      No leave data found for this financial year.
+                    </div>
+                  ) : (() => {
+                    const now = new Date();
+                    const currentMonthAbbr = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][now.getMonth()];
+                    const currentMonthData = monthlyLeaveReport.find((r: any) => r.month === currentMonthAbbr && r.year === now.getFullYear());
+                    const maxDays = Math.max(...monthlyLeaveReport.map((r: any) => r.totalDays), 1);
+                    const yearTotalDays = monthlyLeaveReport.reduce((s: number, r: any) => s + r.totalDays, 0);
+                    const yearApproved = monthlyLeaveReport.reduce((s: number, r: any) => s + r.approvedDays, 0);
+                    const yearPending = monthlyLeaveReport.reduce((s: number, r: any) => s + r.pendingDays, 0);
+                    return (
+                      <>
+                        {/* Current month highlight */}
+                        {currentMonthData && currentMonthData.totalDays > 0 && (
+                          <div className="p-4 bg-primary/5 border-2 border-primary/20 rounded-xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+                            <div>
+                              <p className="text-xs font-bold text-primary uppercase tracking-wider">This Month ({currentMonthData.monthYear})</p>
+                              <p className="text-2xl font-bold text-foreground mt-0.5">{currentMonthData.totalDays} leave day{currentMonthData.totalDays !== 1 ? 's' : ''}</p>
+                              <p className="text-xs text-muted-foreground mt-1">
+                                {currentMonthData.approvedDays} approved · {currentMonthData.pendingDays} pending
+                              </p>
+                            </div>
+                            <div className="grid grid-cols-2 gap-2 text-center text-xs">
+                              <div className="bg-blue-100 text-blue-700 rounded-lg px-3 py-2">
+                                <p className="font-bold text-lg">{currentMonthData.casualDays}</p><p>Casual</p>
+                              </div>
+                              <div className="bg-rose-100 text-rose-700 rounded-lg px-3 py-2">
+                                <p className="font-bold text-lg">{currentMonthData.sickDays}</p><p>Sick</p>
+                              </div>
+                            </div>
+                          </div>
+                        )}
+                        {/* Annual summary mini-cards */}
+                        <div className="grid grid-cols-3 gap-3">
+                          <div className="text-center p-3 bg-slate-50 border border-slate-200 rounded-xl">
+                            <p className="text-2xl font-bold text-slate-700">{yearTotalDays}</p>
+                            <p className="text-xs text-muted-foreground mt-0.5">Total Days</p>
+                          </div>
+                          <div className="text-center p-3 bg-emerald-50 border border-emerald-200 rounded-xl">
+                            <p className="text-2xl font-bold text-emerald-700">{yearApproved}</p>
+                            <p className="text-xs text-muted-foreground mt-0.5">Approved</p>
+                          </div>
+                          <div className="text-center p-3 bg-amber-50 border border-amber-200 rounded-xl">
+                            <p className="text-2xl font-bold text-amber-700">{yearPending}</p>
+                            <p className="text-xs text-muted-foreground mt-0.5">Pending</p>
+                          </div>
+                        </div>
+                        {/* Month-by-month bars */}
+                        <div className="bg-background border border-border rounded-xl overflow-hidden">
+                          <div className="px-4 py-3 border-b border-border">
+                            <h4 className="text-sm font-bold text-foreground">Month-by-Month Breakdown (Apr–Mar)</h4>
+                          </div>
+                          <div className="divide-y divide-border">
+                            {monthlyLeaveReport.map((row: any) => {
+                              const isThisMonth = row.month === currentMonthAbbr && row.year === now.getFullYear();
+                              const barW = maxDays > 0 ? Math.round((row.totalDays / maxDays) * 100) : 0;
+                              return (
+                                <div key={row.monthYear} className={`px-4 py-3 ${isThisMonth ? 'bg-primary/5' : row.totalDays === 0 ? 'opacity-40' : ''}`}>
+                                  <div className="flex items-center justify-between mb-1.5">
+                                    <div className="flex items-center gap-2">
+                                      <span className="text-sm font-semibold text-foreground w-16">{row.monthYear}</span>
+                                      {isThisMonth && <span className="text-[10px] bg-primary text-primary-foreground px-1.5 py-0.5 rounded-full font-bold">NOW</span>}
+                                    </div>
+                                    <div className="flex items-center gap-2 text-xs flex-wrap justify-end">
+                                      {row.approvedDays > 0 && <span className="text-emerald-600 font-semibold">{row.approvedDays} approved</span>}
+                                      {row.pendingDays > 0 && <span className="text-amber-600 font-semibold">{row.pendingDays} pending</span>}
+                                      {row.casualDays > 0 && <span className="text-blue-600">{row.casualDays}CL</span>}
+                                      {row.sickDays > 0 && <span className="text-rose-600">{row.sickDays}SL</span>}
+                                      <span className="font-bold text-foreground w-5 text-right">{row.totalDays}</span>
+                                    </div>
+                                  </div>
+                                  <div className="h-2 bg-muted rounded-full overflow-hidden">
+                                    <div
+                                      className="h-full rounded-full bg-gradient-to-r from-primary/60 to-primary transition-all duration-700"
+                                      style={{ width: `${barW}%` }}
+                                    />
+                                  </div>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      </>
+                    );
+                  })()}
+                </div>
+              )}
+
+              {/* ── Leave Letters Sub-view ── */}
+              {leaveReportView === 'list' && (
               <div className="space-y-4">
                 <div className="flex justify-between items-center mb-4">
                   <h3 className="text-lg font-bold text-foreground">Leave Letters</h3>
@@ -940,7 +1072,6 @@ export function EmployeeProfile() {
                         </div>
                         <p className="text-sm text-muted-foreground mt-1"><Calendar className="w-3 h-3 inline mr-1"/>{l.startDate} to {l.endDate}</p>
                         <p className="text-sm mt-2 text-foreground"><span className="font-medium">Reason:</span> {l.reason}</p>
-                        
                         {l.attachment && (
                           <div className="mt-4">
                             <span className="text-sm font-medium text-foreground block mb-2">Medical Certificate:</span>
@@ -959,7 +1090,6 @@ export function EmployeeProfile() {
                           });
                           setLeaves(leaves.map(x => x.id === l.id ? { ...x, status: 'Approved' } : x));
                         }} className="p-2 bg-emerald-50 text-emerald-600 hover:bg-emerald-100 rounded-md" title="Approve"><Check className="w-4 h-4"/></button>
-                        
                         <button onClick={async () => {
                           await fetch(`${API_BASE_URL}/api/leaves/${l.id}/status`, {
                             method: 'PUT',
@@ -968,7 +1098,6 @@ export function EmployeeProfile() {
                           });
                           setLeaves(leaves.map(x => x.id === l.id ? { ...x, status: 'Rejected' } : x));
                         }} className="p-2 bg-rose-50 text-rose-600 hover:bg-rose-100 rounded-md" title="Reject"><X className="w-4 h-4"/></button>
-
                         <button onClick={async () => {
                           if (!confirm('Are you sure you want to delete this leave request?')) return;
                           try {
@@ -984,6 +1113,7 @@ export function EmployeeProfile() {
                   </div>
                 ))}
               </div>
+              )}
             </div>
           )}
 

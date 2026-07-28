@@ -772,6 +772,193 @@ async def get_all_leaves():
     return leaves
 
 
+# ─── Leave Monthly Report (per employee) ──────────────────────
+@app.get("/api/employees/{employee_id}/leaves/monthly-report")
+async def get_employee_monthly_leave_report(employee_id: str, year: Optional[int] = None, month: Optional[int] = None):
+    """Return a per-month leave summary for a single employee for the given year (default: current financial year)."""
+    db = get_previous_db()
+    if db is None:
+        return []
+
+    import re
+    from datetime import timedelta
+    regex_id = re.compile(f"^{re.escape(employee_id)}$", re.IGNORECASE)
+
+    # Default to current financial year (April–March)
+    now = datetime.now()
+    if year is None:
+        year = now.year if now.month >= 4 else now.year - 1
+
+    # Build 12 months: Apr(year) to Mar(year+1)
+    months = []
+    for m in range(4, 13):
+        months.append((year, m))
+    for m in range(1, 4):
+        months.append((year + 1, m))
+
+    cursor = db.leaves.find(
+        {"$or": [{"employee_id": regex_id}, {"id": regex_id}]}
+    )
+
+    all_leaves = []
+    async for doc in cursor:
+        start_str = str(doc.get("start_date", doc.get("leave_date", "")))[:10]
+        end_str = str(doc.get("end_date", doc.get("leave_date", start_str)))[:10]
+        all_leaves.append({
+            "type": doc.get("leave_type", "Leave"),
+            "status": doc.get("status", "Pending"),
+            "startDate": start_str,
+            "endDate": end_str,
+        })
+
+    def count_days(start_str, end_str, target_year, target_month):
+        """Count working days (exclude Sundays) within a specific month from a leave range."""
+        try:
+            start = datetime.strptime(start_str, "%Y-%m-%d")
+            end = datetime.strptime(end_str, "%Y-%m-%d")
+        except Exception:
+            return 0
+        days = 0
+        current = start
+        while current <= end:
+            if current.year == target_year and current.month == target_month:
+                if current.weekday() != 6:  # not Sunday
+                    days += 1
+            current += timedelta(days=1)
+        return days
+
+    result = []
+    for (yr, mo) in months:
+        import calendar
+        month_name = calendar.month_abbr[mo]
+        total_days = 0
+        approved_days = 0
+        pending_days = 0
+        casual_days = 0
+        sick_days = 0
+
+        for lv in all_leaves:
+            d = count_days(lv["startDate"], lv["endDate"], yr, mo)
+            if d == 0:
+                continue
+            total_days += d
+            if lv["status"] == "Approved":
+                approved_days += d
+            elif lv["status"] == "Pending":
+                pending_days += d
+            if "Sick" in lv["type"]:
+                sick_days += d
+            else:
+                casual_days += d
+
+        result.append({
+            "month": month_name,
+            "year": yr,
+            "monthYear": f"{month_name} {yr}",
+            "totalDays": total_days,
+            "approvedDays": approved_days,
+            "pendingDays": pending_days,
+            "casualDays": casual_days,
+            "sickDays": sick_days,
+        })
+
+    return result
+
+
+# ─── Leave Yearly Report (admin, all employees by month) ──────
+@app.get("/api/leaves/yearly-report")
+async def get_yearly_leave_report(year: Optional[int] = None):
+    """Return a per-month leave summary across all employees for the financial year."""
+    db = get_previous_db()
+    if db is None:
+        return []
+
+    from datetime import timedelta
+    import calendar
+
+    now = datetime.now()
+    if year is None:
+        year = now.year if now.month >= 4 else now.year - 1
+
+    # Financial year months: April(year) → March(year+1)
+    months = []
+    for m in range(4, 13):
+        months.append((year, m))
+    for m in range(1, 4):
+        months.append((year + 1, m))
+
+    cursor = db.leaves.find({})
+    all_leaves = []
+    async for doc in cursor:
+        start_str = str(doc.get("start_date", doc.get("leave_date", "")))[:10]
+        end_str = str(doc.get("end_date", doc.get("leave_date", start_str)))[:10]
+        all_leaves.append({
+            "employee_id": doc.get("employee_id", ""),
+            "type": doc.get("leave_type", "Leave"),
+            "status": doc.get("status", "Pending"),
+            "startDate": start_str,
+            "endDate": end_str,
+        })
+
+    def count_days_in_month(start_str, end_str, target_year, target_month):
+        try:
+            start = datetime.strptime(start_str, "%Y-%m-%d")
+            end = datetime.strptime(end_str, "%Y-%m-%d")
+        except Exception:
+            return 0
+        days = 0
+        current = start
+        while current <= end:
+            if current.year == target_year and current.month == target_month:
+                if current.weekday() != 6:
+                    days += 1
+            current += timedelta(days=1)
+        return days
+
+    result = []
+    for (yr, mo) in months:
+        total = 0
+        approved = 0
+        pending = 0
+        rejected = 0
+        casual = 0
+        sick = 0
+        employees_on_leave = set()
+
+        for lv in all_leaves:
+            d = count_days_in_month(lv["startDate"], lv["endDate"], yr, mo)
+            if d == 0:
+                continue
+            total += d
+            status = lv["status"]
+            if status == "Approved":
+                approved += d
+                employees_on_leave.add(lv["employee_id"])
+            elif status == "Pending":
+                pending += d
+            elif status == "Rejected":
+                rejected += d
+            if "Sick" in lv["type"]:
+                sick += d
+            else:
+                casual += d
+
+        result.append({
+            "month": calendar.month_abbr[mo],
+            "year": yr,
+            "monthYear": f"{calendar.month_abbr[mo]} {yr}",
+            "totalDays": total,
+            "approvedDays": approved,
+            "pendingDays": pending,
+            "rejectedDays": rejected,
+            "casualDays": casual,
+            "sickDays": sick,
+            "employeesOnLeave": len(employees_on_leave),
+        })
+
+    return result
+
+
 # ─── Work Information ─────────────────────────────────────────
 class WorkInfo(BaseModel):
     head: str = ""
@@ -1262,6 +1449,212 @@ async def check_active_holiday(date: Optional[str] = None):
     return {"isHoliday": False}
 
 
+# ─── Password Reset Requests ──────────────────────────────────
+
+class PasswordResetRequest(BaseModel):
+    employee_id: str
+    employee_name: str
+    email: str
+    reason: Optional[str] = ""
+    new_password: str  # Employee sets their own desired new password
+
+class PasswordResetAction(BaseModel):
+    action: str  # "approve" or "reject"
+    rejection_reason: Optional[str] = ""
+
+@app.post("/api/password-reset-requests")
+async def submit_password_reset_request(req: PasswordResetRequest):
+    """Employee submits a password reset request for admin approval."""
+    db = get_previous_db()
+    if db is None:
+        raise HTTPException(status_code=500, detail="Database connection not active")
+
+    # Check if there's already a pending request from this employee
+    existing = await db.password_reset_requests.find_one({
+        "employee_id": req.employee_id,
+        "status": "pending"
+    })
+    if existing:
+        raise HTTPException(status_code=400, detail="A pending reset request already exists for this employee.")
+
+    doc = {
+        "employee_id": req.employee_id,
+        "employee_name": req.employee_name,
+        "email": req.email,
+        "reason": req.reason or "",
+        "status": "pending",  # pending | approved | rejected
+        "created_at": datetime.now(),
+        "resolved_at": None,
+        "rejection_reason": "",
+        "new_password": req.new_password,  # stored from employee's submission
+    }
+    result = await db.password_reset_requests.insert_one(doc)
+    return {"message": "Password reset request submitted. Awaiting admin approval.", "id": str(result.inserted_id)}
+
+
+@app.get("/api/password-reset-requests")
+async def get_all_password_reset_requests(status: Optional[str] = None):
+    """Admin fetches all password reset requests, optionally filtered by status."""
+    db = get_previous_db()
+    if db is None:
+        return []
+
+    query = {}
+    if status:
+        query["status"] = status
+
+    cursor = db.password_reset_requests.find(query).sort("created_at", -1)
+    requests_list = []
+    async for doc in cursor:
+        created = doc.get("created_at")
+        created_str = created.strftime("%b %d, %Y %I:%M %p") if isinstance(created, datetime) else str(created)[:16]
+        resolved = doc.get("resolved_at")
+        resolved_str = resolved.strftime("%b %d, %Y %I:%M %p") if isinstance(resolved, datetime) else (str(resolved)[:16] if resolved else None)
+        requests_list.append({
+            "id": str(doc["_id"]),
+            "employee_id": doc.get("employee_id"),
+            "employee_name": doc.get("employee_name"),
+            "email": doc.get("email"),
+            "reason": doc.get("reason", ""),
+            "status": doc.get("status", "pending"),
+            "created_at": created_str,
+            "resolved_at": resolved_str,
+            "rejection_reason": doc.get("rejection_reason", ""),
+        })
+    return requests_list
+
+
+@app.put("/api/password-reset-requests/{request_id}/action")
+async def handle_password_reset_request(request_id: str, action_data: PasswordResetAction):
+    """Admin approves or rejects a password reset request."""
+    db = get_previous_db()
+    if db is None:
+        raise HTTPException(status_code=500, detail="Database connection not active")
+
+    from bson.objectid import ObjectId
+    try:
+        obj_id = ObjectId(request_id)
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid request ID")
+
+    req_doc = await db.password_reset_requests.find_one({"_id": obj_id})
+    if not req_doc:
+        raise HTTPException(status_code=404, detail="Password reset request not found")
+
+    if req_doc.get("status") != "pending":
+        raise HTTPException(status_code=400, detail="This request has already been resolved.")
+
+    if action_data.action == "approve":
+        employee_id = req_doc.get("employee_id")
+        new_password = req_doc.get("new_password")
+        employee_updated = False
+
+        # If employee set a new_password in the request, apply it to employees collection
+        if new_password:
+            result = await db.employees.update_one(
+                {"$or": [{"employee_id": employee_id}, {"id": employee_id}]},
+                {"$set": {"password": new_password}}
+            )
+            employee_updated = result.modified_count > 0
+
+        # Mark request as approved
+        await db.password_reset_requests.update_one(
+            {"_id": obj_id},
+            {"$set": {
+                "status": "approved",
+                "resolved_at": datetime.now(),
+            }}
+        )
+        return {"message": "Password reset approved.", "employee_updated": employee_updated}
+
+    elif action_data.action == "reject":
+        await db.password_reset_requests.update_one(
+            {"_id": obj_id},
+            {"$set": {
+                "status": "rejected",
+                "resolved_at": datetime.now(),
+                "rejection_reason": action_data.rejection_reason or "",
+            }}
+        )
+        return {"message": "Password reset request rejected."}
+
+    else:
+        raise HTTPException(status_code=400, detail="Invalid action. Use 'approve' or 'reject'.")
+
+
+@app.delete("/api/password-reset-requests/{request_id}")
+async def delete_password_reset_request(request_id: str):
+    """Admin deletes a resolved password reset request."""
+    db = get_previous_db()
+    if db is None:
+        raise HTTPException(status_code=500, detail="Database connection not active")
+
+    from bson.objectid import ObjectId
+    try:
+        obj_id = ObjectId(request_id)
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid request ID")
+
+    result = await db.password_reset_requests.delete_one({"_id": obj_id})
+    if result.deleted_count == 0:
+        raise HTTPException(status_code=404, detail="Request not found")
+    return {"message": "Password reset request deleted."}
+
+
+@app.get("/api/password-reset-requests/employee/{employee_id}")
+async def get_employee_reset_requests(employee_id: str):
+    """Employee checks the status of their own password reset request."""
+    db = get_previous_db()
+    if db is None:
+        return []
+
+    cursor = db.password_reset_requests.find({"employee_id": employee_id}).sort("created_at", -1)
+    requests_list = []
+    async for doc in cursor:
+        created = doc.get("created_at")
+        created_str = created.strftime("%b %d, %Y %I:%M %p") if isinstance(created, datetime) else str(created)[:16]
+        requests_list.append({
+            "id": str(doc["_id"]),
+            "status": doc.get("status", "pending"),
+            "created_at": created_str,
+            "rejection_reason": doc.get("rejection_reason", ""),
+            "has_new_password": bool(doc.get("new_password")),
+        })
+    return requests_list
+
+
+class SetEmployeePasswordSchema(BaseModel):
+    employee_id: str
+    new_password: str
+
+@app.post("/api/password-reset-requests/set-password")
+async def employee_set_new_password(data: SetEmployeePasswordSchema):
+    """Employee sets/updates password for an approved reset request."""
+    db = get_previous_db()
+    if db is None:
+        raise HTTPException(status_code=500, detail="Database connection not active")
+
+    req = await db.password_reset_requests.find_one({
+        "employee_id": data.employee_id,
+        "status": "approved"
+    })
+    if not req:
+        raise HTTPException(status_code=400, detail="No approved password reset request found for this employee.")
+
+    result = await db.employees.update_one(
+        {"$or": [{"employee_id": data.employee_id}, {"id": data.employee_id}]},
+        {"$set": {"password": data.new_password}}
+    )
+
+    await db.password_reset_requests.update_one(
+        {"_id": req["_id"]},
+        {"$set": {"new_password": data.new_password}}
+    )
+
+    return {"message": "Password updated successfully!", "updated": result.modified_count > 0}
+
+
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run("app:app", host="0.0.0.0", port=8081, reload=True)
+
