@@ -479,18 +479,88 @@ async def get_employee_updates(employee_id: str):
         return []
     import re
     regex_id = re.compile(f"^{re.escape(employee_id)}$", re.IGNORECASE)
+
+    # Fetch employee default location/mandal/village/address if doc location is empty
+    emp_doc = await db.employees.find_one(
+        {"$or": [{"employee_id": regex_id}, {"id": regex_id}, {"empId": regex_id}]}
+    )
+    emp_default_loc = ""
+    if emp_doc:
+        emp_default_loc = (
+            emp_doc.get("office_location") or 
+            emp_doc.get("mandal") or 
+            emp_doc.get("village") or 
+            emp_doc.get("address") or ""
+        )
+
     cursor = db.daily_updates.find(
         {"$or": [{"employee_id": regex_id}, {"id": regex_id}, {"empId": regex_id}]}
     ).sort("created_at", -1)
     updates = []
     async for doc in cursor:
-        created = doc.get("created_at", "")
-        date_str = created.strftime("%Y-%m-%d") if isinstance(created, datetime) else str(created)[:10]
+        created = doc.get("created_at") or doc.get("timestamp") or doc.get("date") or ""
+        date_str = ""
+        time_str = ""
+        if isinstance(created, datetime):
+            date_str = created.strftime("%d/%m/%Y")
+            time_str = created.strftime("%I:%M:%S %p")
+        elif isinstance(created, str) and created:
+            try:
+                dt_obj = datetime.fromisoformat(created.replace('Z', '+00:00'))
+                date_str = dt_obj.strftime("%d/%m/%Y")
+                time_str = dt_obj.strftime("%I:%M:%S %p")
+            except Exception:
+                date_str = str(created)[:10]
+                if len(str(created)) >= 19:
+                    time_str = str(created)[11:19]
+                elif len(str(created)) >= 16:
+                    time_str = str(created)[11:16]
+        
+        if not date_str or date_str == "N/A":
+            date_str = str(doc.get("date") or "N/A")
+        if not time_str and doc.get("time"):
+            time_str = str(doc.get("time"))
+
+        lat = doc.get("latitude") or doc.get("lat")
+        lng = doc.get("longitude") or doc.get("lng")
+
+        location = ""
+        if lat and lng:
+            location = f"Lat: {lat}, Lng: {lng}"
+        else:
+            loc_val = (
+                doc.get("location") or 
+                doc.get("location_name") or 
+                doc.get("address") or 
+                doc.get("place") or 
+                doc.get("loc") or 
+                emp_default_loc
+            )
+            if loc_val:
+                location = str(loc_val)
+
+        description = (
+            doc.get("notes") or 
+            doc.get("description") or 
+            doc.get("update") or 
+            doc.get("content") or 
+            doc.get("title") or ""
+        )
+
+        images = doc.get("images") or doc.get("image") or doc.get("imageUrl") or []
+        image_url = ""
+        if isinstance(images, list) and len(images) > 0:
+            image_url = str(images[0])
+        elif isinstance(images, str):
+            image_url = images
+
         updates.append({
             "id":          str(doc["_id"]),
             "date":        date_str,
-            "description": doc.get("notes", ""),
-            "imageUrl":    (doc.get("images") or [""])[0] if doc.get("images") else "",
+            "time":        time_str,
+            "location":    location or "N/A",
+            "description": description,
+            "imageUrl":    image_url,
         })
     return updates
 
@@ -502,9 +572,9 @@ async def get_employee_activities(employee_id: str):
     if db is None:
         return []
     import re
-    regex_id = re.compile(f"^{re.escape(employee_id)}", re.IGNORECASE)
+    regex_id = re.compile(f"^{re.escape(employee_id)}$", re.IGNORECASE)
     cursor = db.activities.find(
-        {"$or": [{"employee_id": regex_id}, {"id": regex_id}, {"empId": regex_id}, {"action": regex_id}]}
+        {"$or": [{"employee_id": regex_id}, {"id": regex_id}, {"empId": regex_id}]}
     ).sort("created_at", -1)
     activities = []
     async for doc in cursor:
@@ -1203,9 +1273,11 @@ async def update_leave_status(leave_id: str, status_update: LeaveStatusUpdate):
 class DailyUpdateCreate(BaseModel):
     description: str
     imageUrl: str = ""
+    location: str = ""
 
 class DailyUpdateEdit(BaseModel):
     description: str
+    location: str = ""
 
 @app.post("/api/employees/{employee_id}/updates")
 async def create_daily_update(employee_id: str, update: DailyUpdateCreate):
@@ -1214,6 +1286,8 @@ async def create_daily_update(employee_id: str, update: DailyUpdateCreate):
     doc = {
         "employee_id": employee_id,
         "notes": update.description,
+        "description": update.description,
+        "location": update.location,
         "images": [update.imageUrl] if update.imageUrl else [],
         "created_at": datetime.now()
     }
@@ -1233,9 +1307,12 @@ async def edit_daily_update(employee_id: str, update_id: str, update: DailyUpdat
     db = get_previous_db()
     if db is None: return {"message": "Mock mode"}
     from bson.objectid import ObjectId
+    payload = {"notes": update.description, "description": update.description}
+    if update.location:
+        payload["location"] = update.location
     await db.daily_updates.update_one(
         {"_id": ObjectId(update_id)},
-        {"$set": {"notes": update.description}}
+        {"$set": payload}
     )
     return {"message": "Update edited"}
 

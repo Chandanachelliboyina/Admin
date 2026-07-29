@@ -188,7 +188,7 @@ export function EmployeeProfile() {
 
 
   const [isUpdateModalOpen, setIsUpdateModalOpen] = useState(false);
-  const [updateForm, setUpdateForm] = useState({ imageUrl: '', description: '' });
+  const [updateForm, setUpdateForm] = useState({ imageUrl: '', description: '', location: '' });
 
   const handleSaveUpdate = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -203,7 +203,7 @@ export function EmployeeProfile() {
         if (updResponse.ok) setUpdates(await updResponse.json());
       }
       setIsUpdateModalOpen(false);
-      setUpdateForm({ imageUrl: '', description: '' });
+      setUpdateForm({ imageUrl: '', description: '', location: '' });
     } catch(err) {
         console.error(err);
     }
@@ -756,26 +756,58 @@ export function EmployeeProfile() {
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
                 {updates.map(update => (
-                    <div key={update.id} className="bg-card border border-border rounded-xl overflow-hidden hover:shadow-md transition-shadow group relative flex flex-col">
-                      <div className="absolute top-2 right-2 flex space-x-2 opacity-0 group-hover:opacity-100 transition-opacity z-10">
-                        <button onClick={() => handleDeleteUpdate(update.id)} className="p-1.5 bg-red-100 text-red-600 rounded-md hover:bg-red-200 transition-colors shadow-sm">
-                          <Trash2 className="w-4 h-4" />
-                        </button>
-                      </div>
-                      {update.imageUrl && (
-                        <div className="h-48 overflow-hidden bg-muted flex items-center justify-center shrink-0">
+                    <div key={update.id} className="bg-card border border-border rounded-xl overflow-hidden shadow-sm hover:shadow-md transition-shadow group flex flex-col relative">
+                      {/* Delete Button */}
+                      <button 
+                        onClick={() => handleDeleteUpdate(update.id)} 
+                        title="Delete update" 
+                        className="absolute top-3 right-3 z-20 p-2 bg-red-100/90 text-red-600 rounded-lg hover:bg-red-200 transition-colors shadow-md backdrop-blur-xs"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+
+                      {/* Image Container with Dark Overlay Banner matching user screenshot */}
+                      {update.imageUrl ? (
+                        <div className="relative h-64 overflow-hidden bg-slate-900 flex items-center justify-center shrink-0">
                           {update.imageUrl.startsWith('data:image') || update.imageUrl.startsWith('http') ? (
                             <img src={update.imageUrl} alt="Update" className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" />
                           ) : (
                             <div className="text-muted-foreground text-xs p-4 overflow-hidden break-words">{update.imageUrl}</div>
                           )}
+
+                          {/* Dark overlay at bottom of image */}
+                          <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/90 via-black/70 to-transparent px-4 py-2.5 pt-6 text-center text-white font-mono tracking-tight text-xs drop-shadow">
+                            <div className="font-semibold flex items-center justify-center space-x-3 text-white/95">
+                              <span>Date: {update.date || 'N/A'}</span>
+                              {update.time && <span>Time: {update.time}</span>}
+                            </div>
+                            {update.location && (
+                              <div className="text-[11px] mt-0.5 text-gray-200 font-medium truncate">
+                                {update.location.startsWith('Lat:') || update.location.startsWith('Location:') ? update.location : `Location: ${update.location}`}
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      ) : (
+                        /* Fallback Banner when no image is uploaded */
+                        <div className="bg-slate-900 px-4 py-4 text-center text-white font-mono tracking-tight text-xs">
+                          <div className="font-semibold flex items-center justify-center space-x-3">
+                            <span>Date: {update.date || 'N/A'}</span>
+                            {update.time && <span>Time: {update.time}</span>}
+                          </div>
+                          {update.location && (
+                            <div className="text-[11px] mt-0.5 text-gray-200 font-medium">
+                              {update.location.startsWith('Lat:') || update.location.startsWith('Location:') ? update.location : `Location: ${update.location}`}
+                            </div>
+                          )}
                         </div>
                       )}
-                      <div className="p-4 flex-grow flex flex-col justify-between">
-                        <p className="text-sm text-foreground leading-relaxed line-clamp-3">{update.description}</p>
-                        <span className="text-xs font-medium text-muted-foreground mt-3 flex items-center">
-                          <Calendar className="w-3 h-3 mr-1" /> {update.date}
-                        </span>
+
+                      {/* Description Text Below Image */}
+                      <div className="p-5 flex-grow flex flex-col justify-center">
+                        <p className="text-base text-foreground leading-relaxed whitespace-pre-wrap font-normal">
+                          {update.description || 'Field update submission'}
+                        </p>
                       </div>
                     </div>
                 ))}
@@ -1202,6 +1234,16 @@ export function EmployeeProfile() {
                   onChange={(e) => setUpdateForm({...updateForm, imageUrl: e.target.value})}
                   className="w-full border border-input rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary bg-background"
                   placeholder="https://example.com/image.jpg"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-foreground mb-1">Location (Optional)</label>
+                <input
+                  type="text"
+                  value={updateForm.location}
+                  onChange={(e) => setUpdateForm({...updateForm, location: e.target.value})}
+                  className="w-full border border-input rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary bg-background"
+                  placeholder="e.g. Field Site / Branch Office / GPS Location"
                 />
               </div>
               <div>
