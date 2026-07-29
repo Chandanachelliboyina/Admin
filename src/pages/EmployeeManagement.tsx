@@ -19,7 +19,7 @@ export function EmployeeManagement() {
   const [employees, setEmployees] = useState<Employee[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  
+  const [searchQuery, setSearchQuery] = useState('');
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [newEmployee, setNewEmployee] = useState<Partial<Employee>>({});
 
@@ -37,17 +37,17 @@ export function EmployeeManagement() {
       
       const data = await response.json();
       
-      // Map backend model to frontend model
+      // Map backend model to frontend model — include all registered Employee IDs
       const mappedEmployees: Employee[] = data.map((emp: any) => ({
         id: emp.id,
-        name: emp.name || 'Unknown',
+        name: (emp.name && emp.name !== 'Unknown' && emp.name !== 'Unknown Name') ? emp.name : emp.id,
         role: emp.position || 'N/A',
         department: emp.department || 'Operations', // Fallback if missing
         phone: emp.mobileNumber || 'N/A',
         location: emp.address || 'N/A',
         photo: emp.photo || emp.profile_picture || `https://i.pravatar.cc/150?u=${emp.id}`,
         has_access: emp.has_access !== undefined ? emp.has_access : true,
-      })).filter((emp: Employee) => emp.name !== 'Unknown'); // Hide incomplete profiles
+      }));
       
       setEmployees(mappedEmployees);
     } catch (err: any) {
@@ -178,16 +178,31 @@ export function EmployeeManagement() {
     }
   };
 
+  const filteredEmployees = employees.filter(emp =>
+    emp.id?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    emp.name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    emp.role?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    emp.department?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    emp.phone?.toLowerCase().includes(searchQuery.toLowerCase())
+  );
+
   return (
     <div className="space-y-6">
-      <div className="flex justify-between items-center">
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight text-foreground">Employee Management</h1>
-          <p className="text-muted-foreground mt-1">Manage your team members and their details.</p>
+          <div className="flex items-center gap-3">
+            <h1 className="text-3xl font-bold tracking-tight text-foreground">Employee Management</h1>
+            <span className="bg-primary/10 text-primary text-xs font-bold px-3.5 py-1 rounded-full border border-primary/20">
+              Total: {employees.length}
+            </span>
+          </div>
+          <p className="text-muted-foreground mt-1">
+            Total registered Employee IDs present in database: <strong className="text-foreground">{employees.length}</strong>
+          </p>
         </div>
         <button 
           onClick={() => setIsAddModalOpen(true)}
-          className="flex items-center space-x-2 bg-primary text-primary-foreground px-4 py-2 rounded-md hover:bg-primary/90 transition-colors"
+          className="flex items-center space-x-2 bg-primary text-primary-foreground px-4 py-2 rounded-md hover:bg-primary/90 transition-colors shrink-0"
         >
           <Plus className="w-4 h-4" />
           <span>Add Employee</span>
@@ -195,14 +210,19 @@ export function EmployeeManagement() {
       </div>
 
       <div className="bg-card rounded-lg border border-border overflow-hidden shadow-sm">
-        <div className="p-4 border-b border-border flex items-center justify-between">
-          <div className="relative w-72">
+        <div className="p-4 border-b border-border flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
+          <div className="relative w-full sm:w-80">
             <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
             <input
               type="text"
-              placeholder="Search employees..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder="Search by Employee ID, Name, Role..."
               className="w-full pl-9 pr-4 py-2 bg-background border border-input rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent"
             />
+          </div>
+          <div className="text-xs text-muted-foreground font-medium">
+            Showing <strong className="text-foreground">{filteredEmployees.length}</strong> of <strong className="text-foreground">{employees.length}</strong> total employees
           </div>
         </div>
         
@@ -234,14 +254,14 @@ export function EmployeeManagement() {
                     {error}
                   </td>
                 </tr>
-              ) : employees.length === 0 ? (
+              ) : filteredEmployees.length === 0 ? (
                 <tr>
                   <td colSpan={6} className="px-6 py-8 text-center text-muted-foreground">
-                    No employees found. Add an employee to get started.
+                    No employees found matching your search.
                   </td>
                 </tr>
               ) : (
-                employees.map((emp) => (
+                filteredEmployees.map((emp) => (
                   <tr key={emp.id} className="border-b border-border hover:bg-muted/30 transition-colors">
                     <td className="px-6 py-4">
                       <span className="inline-flex items-center px-2.5 py-0.5 rounded-md text-sm font-medium bg-primary/10 text-primary">

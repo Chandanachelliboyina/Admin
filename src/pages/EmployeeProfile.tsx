@@ -1,7 +1,44 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { ArrowLeft, User, Mail, Phone, MapPin, Briefcase, Calendar, Info, Map, Building, Edit2, X, Download, Printer, Image as ImageIcon, Activity, Trash2, Search, CalendarRange, Bell, Plus, Check, BarChart3 } from 'lucide-react';
+import { ArrowLeft, User, Mail, Phone, MapPin, Briefcase, Calendar, Info, Map, Building, Edit2, X, Download, Printer, Image as ImageIcon, Activity, Trash2, Search, CalendarRange, Bell, Plus, Check, BarChart3, CheckCircle2, Minus, CalendarDays } from 'lucide-react';
 import { API_BASE_URL } from '../config';
+
+function formatDisplayTime(timeStr?: string, _dateStr?: string): string {
+  if (!timeStr) return '';
+  const raw = timeStr.trim();
+  try {
+    const match = raw.match(/^(\d{1,2}):(\d{2})(?::(\d{2}))?\s*(AM|PM)?$/i);
+    if (match) {
+      let hours = parseInt(match[1], 10);
+      const minutes = parseInt(match[2], 10);
+      const seconds = match[3] ? parseInt(match[3], 10) : 0;
+      const ampm = match[4] ? match[4].toUpperCase() : '';
+
+      if (ampm === 'PM' && hours < 12) hours += 12;
+      if (ampm === 'AM' && hours === 12) hours = 0;
+
+      // If time was recorded in UTC AM (e.g. 10:01 AM UTC while local IST is 3:31 PM), convert UTC to IST (+5:30)
+      if (ampm === 'AM' || (!ampm && hours < 12)) {
+        let totalMinutes = hours * 60 + minutes + 330; // +5 hours 30 mins
+        totalMinutes = totalMinutes % (24 * 60);
+        const newHours = Math.floor(totalMinutes / 60);
+        const newMinutes = totalMinutes % 60;
+        
+        const finalAmPm = newHours >= 12 ? 'PM' : 'AM';
+        const displayHours = newHours % 12 === 0 ? 12 : newHours % 12;
+        
+        const hStr = displayHours.toString().padStart(2, '0');
+        const mStr = newMinutes.toString().padStart(2, '0');
+        const sStr = seconds.toString().padStart(2, '0');
+        
+        return `${hStr}:${mStr}:${sStr} ${finalAmPm}`;
+      }
+    }
+  } catch (e) {
+    console.error('Error formatting time:', e);
+  }
+  return timeStr;
+}
 
 export function EmployeeProfile() {
   const { id } = useParams();
@@ -779,7 +816,7 @@ export function EmployeeProfile() {
                           <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/90 via-black/70 to-transparent px-4 py-2.5 pt-6 text-center text-white font-mono tracking-tight text-xs drop-shadow">
                             <div className="font-semibold flex items-center justify-center space-x-3 text-white/95">
                               <span>Date: {update.date || 'N/A'}</span>
-                              {update.time && <span>Time: {update.time}</span>}
+                              {update.time && <span>Time: {formatDisplayTime(update.time, update.date)}</span>}
                             </div>
                             {update.location && (
                               <div className="text-[11px] mt-0.5 text-gray-200 font-medium truncate">
@@ -793,7 +830,7 @@ export function EmployeeProfile() {
                         <div className="bg-slate-900 px-4 py-4 text-center text-white font-mono tracking-tight text-xs">
                           <div className="font-semibold flex items-center justify-center space-x-3">
                             <span>Date: {update.date || 'N/A'}</span>
-                            {update.time && <span>Time: {update.time}</span>}
+                            {update.time && <span>Time: {formatDisplayTime(update.time, update.date)}</span>}
                           </div>
                           {update.location && (
                             <div className="text-[11px] mt-0.5 text-gray-200 font-medium">
@@ -926,49 +963,71 @@ export function EmployeeProfile() {
                 </div>
               </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                {/* Casual Leaves Card */}
-                <div className="bg-[#f8fbff] border border-blue-100 p-6 rounded-2xl shadow-sm">
-                  <div className="mb-6">
-                    <h3 className="text-blue-900 font-semibold text-lg">Casual Leaves</h3>
-                    <p className="text-blue-500/80 text-sm">April to March</p>
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6">
+                {/* Casual Leave (CL) Card */}
+                <div className="bg-[#f4f8ff] dark:bg-blue-950/20 border border-blue-100 dark:border-blue-900/50 p-5 sm:p-6 rounded-2xl shadow-sm">
+                  <div className="mb-4 flex items-center justify-between">
+                    <div>
+                      <h3 className="text-blue-900 dark:text-blue-200 font-bold text-base sm:text-lg flex items-center gap-2">
+                        <CalendarDays className="w-5 h-5 text-blue-600 shrink-0" />
+                        Casual Leave (CL)
+                      </h3>
+                      <p className="text-blue-500/90 dark:text-blue-400 text-xs font-medium mt-0.5">1 CL earned per month</p>
+                    </div>
                   </div>
                   
-                  <div className="grid grid-cols-3 text-center divide-x divide-blue-100">
-                    <div>
-                      <div className="text-2xl font-bold text-blue-900">{casualTotal}</div>
-                      <div className="text-xs text-blue-600 mt-1">Total</div>
+                  <div className="grid grid-cols-3 gap-2 sm:gap-3 text-center">
+                    <div className="bg-blue-100/70 dark:bg-blue-900/40 border border-blue-200/60 dark:border-blue-800/60 px-2 py-3 sm:px-3.5 sm:py-3.5 rounded-xl flex flex-col justify-center items-center min-w-0">
+                      <div className="text-xl sm:text-2xl font-black text-blue-900 dark:text-blue-100 leading-tight">{casualTotal}</div>
+                      <div className="text-[11px] sm:text-xs font-bold text-blue-700 dark:text-blue-300 mt-1 uppercase tracking-tight truncate w-full">Total</div>
                     </div>
-                    <div>
-                      <div className="text-2xl font-bold text-red-600">{casualTaken}</div>
-                      <div className="text-xs text-blue-600 mt-1">Taken</div>
+                    <div className="bg-rose-100/70 dark:bg-rose-950/40 border border-rose-200/60 dark:border-rose-800/60 px-2 py-3 sm:px-3.5 sm:py-3.5 rounded-xl flex flex-col justify-center items-center min-w-0">
+                      <div className="text-xl sm:text-2xl font-black text-rose-600 dark:text-rose-400 flex items-center justify-center gap-1 leading-tight">
+                        <Minus className="w-3.5 h-3.5 text-rose-500 stroke-[3] shrink-0" />
+                        {casualTaken}
+                      </div>
+                      <div className="text-[11px] sm:text-xs font-bold text-rose-700 dark:text-rose-300 mt-1 uppercase tracking-tight truncate w-full">Used</div>
                     </div>
-                    <div>
-                      <div className="text-2xl font-bold text-green-600">{casualRemaining}</div>
-                      <div className="text-xs text-blue-600 mt-1">Remaining</div>
+                    <div className="bg-emerald-100/70 dark:bg-emerald-950/40 border border-emerald-200/60 dark:border-emerald-800/60 px-2 py-3 sm:px-3.5 sm:py-3.5 rounded-xl flex flex-col justify-center items-center min-w-0">
+                      <div className="text-xl sm:text-2xl font-black text-emerald-700 dark:text-emerald-300 flex items-center justify-center gap-1 leading-tight">
+                        <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 stroke-[2.5] shrink-0" />
+                        {casualRemaining}
+                      </div>
+                      <div className="text-[11px] sm:text-xs font-bold text-emerald-800 dark:text-emerald-300 mt-1 uppercase tracking-tight truncate w-full" title="Remaining">Remaining</div>
                     </div>
                   </div>
                 </div>
 
-                {/* Sick Leaves Card */}
-                <div className="bg-[#fdfaff] border border-purple-100 p-6 rounded-2xl shadow-sm">
-                  <div className="mb-6">
-                    <h3 className="text-purple-900 font-semibold text-lg">Sick Leaves</h3>
-                    <p className="text-purple-500/80 text-sm">April to March</p>
+                {/* Sick Leave (SL) Card */}
+                <div className="bg-[#faf5ff] dark:bg-purple-950/20 border border-purple-100 dark:border-purple-900/50 p-5 sm:p-6 rounded-2xl shadow-sm">
+                  <div className="mb-4 flex items-center justify-between">
+                    <div>
+                      <h3 className="text-purple-900 dark:text-purple-200 font-bold text-base sm:text-lg flex items-center gap-2">
+                        <CalendarDays className="w-5 h-5 text-purple-600 shrink-0" />
+                        Sick Leave (SL)
+                      </h3>
+                      <p className="text-purple-500/90 dark:text-purple-400 text-xs font-medium mt-0.5">1 SL earned per month</p>
+                    </div>
                   </div>
                   
-                  <div className="grid grid-cols-3 text-center divide-x divide-purple-100">
-                    <div>
-                      <div className="text-2xl font-bold text-purple-900">{sickTotal}</div>
-                      <div className="text-xs text-purple-600 mt-1">Total</div>
+                  <div className="grid grid-cols-3 gap-2 sm:gap-3 text-center">
+                    <div className="bg-purple-100/70 dark:bg-purple-900/40 border border-purple-200/60 dark:border-purple-800/60 px-2 py-3 sm:px-3.5 sm:py-3.5 rounded-xl flex flex-col justify-center items-center min-w-0">
+                      <div className="text-xl sm:text-2xl font-black text-purple-900 dark:text-purple-100 leading-tight">{sickTotal}</div>
+                      <div className="text-[11px] sm:text-xs font-bold text-purple-700 dark:text-purple-300 mt-1 uppercase tracking-tight truncate w-full">Total</div>
                     </div>
-                    <div>
-                      <div className="text-2xl font-bold text-red-600">{sickTaken}</div>
-                      <div className="text-xs text-purple-600 mt-1">Taken</div>
+                    <div className="bg-rose-100/70 dark:bg-rose-950/40 border border-rose-200/60 dark:border-rose-800/60 px-2 py-3 sm:px-3.5 sm:py-3.5 rounded-xl flex flex-col justify-center items-center min-w-0">
+                      <div className="text-xl sm:text-2xl font-black text-rose-600 dark:text-rose-400 flex items-center justify-center gap-1 leading-tight">
+                        <Minus className="w-3.5 h-3.5 text-rose-500 stroke-[3] shrink-0" />
+                        {sickTaken}
+                      </div>
+                      <div className="text-[11px] sm:text-xs font-bold text-rose-700 dark:text-rose-300 mt-1 uppercase tracking-tight truncate w-full">Used</div>
                     </div>
-                    <div>
-                      <div className="text-2xl font-bold text-green-600">{sickRemaining}</div>
-                      <div className="text-xs text-purple-600 mt-1">Remaining</div>
+                    <div className="bg-emerald-100/70 dark:bg-emerald-950/40 border border-emerald-200/60 dark:border-emerald-800/60 px-2 py-3 sm:px-3.5 sm:py-3.5 rounded-xl flex flex-col justify-center items-center min-w-0">
+                      <div className="text-xl sm:text-2xl font-black text-emerald-700 dark:text-emerald-300 flex items-center justify-center gap-1 leading-tight">
+                        <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 stroke-[2.5] shrink-0" />
+                        {sickRemaining}
+                      </div>
+                      <div className="text-[11px] sm:text-xs font-bold text-emerald-800 dark:text-emerald-300 mt-1 uppercase tracking-tight truncate w-full" title="Remaining">Remaining</div>
                     </div>
                   </div>
                 </div>

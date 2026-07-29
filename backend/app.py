@@ -497,29 +497,60 @@ async def get_employee_updates(employee_id: str):
         {"$or": [{"employee_id": regex_id}, {"id": regex_id}, {"empId": regex_id}]}
     ).sort("created_at", -1)
     updates = []
+    from datetime import timezone, timedelta
+    ist = timezone(timedelta(hours=5, minutes=30))
+
     async for doc in cursor:
-        created = doc.get("created_at") or doc.get("timestamp") or doc.get("date") or ""
-        date_str = ""
-        time_str = ""
-        if isinstance(created, datetime):
-            date_str = created.strftime("%d/%m/%Y")
-            time_str = created.strftime("%I:%M:%S %p")
-        elif isinstance(created, str) and created:
-            try:
-                dt_obj = datetime.fromisoformat(created.replace('Z', '+00:00'))
-                date_str = dt_obj.strftime("%d/%m/%Y")
-                time_str = dt_obj.strftime("%I:%M:%S %p")
-            except Exception:
-                date_str = str(created)[:10]
-                if len(str(created)) >= 19:
-                    time_str = str(created)[11:19]
-                elif len(str(created)) >= 16:
-                    time_str = str(created)[11:16]
-        
-        if not date_str or date_str == "N/A":
-            date_str = str(doc.get("date") or "N/A")
-        if not time_str and doc.get("time"):
-            time_str = str(doc.get("time"))
+        created = doc.get("created_at") or doc.get("timestamp")
+        doc_time = doc.get("time") or doc.get("time_str")
+        doc_date = doc.get("date") or doc.get("date_str")
+
+        parsed_dt = None
+        if created:
+            if isinstance(created, datetime):
+                parsed_dt = created
+            elif isinstance(created, str) and created.strip():
+                clean_c = created.strip().replace("Z", "+00:00")
+                for fmt in (
+                    "%Y-%m-%dT%H:%M:%S.%f%z", "%Y-%m-%dT%H:%M:%S%z",
+                    "%Y-%m-%dT%H:%M:%S.%f", "%Y-%m-%dT%H:%M:%S",
+                    "%Y-%m-%d %H:%M:%S", "%Y-%m-%d %H:%M"
+                ):
+                    try:
+                        parsed_dt = datetime.strptime(clean_c, fmt)
+                        break
+                    except Exception:
+                        pass
+
+        if parsed_dt:
+            if parsed_dt.tzinfo is None:
+                parsed_dt = parsed_dt.replace(tzinfo=timezone.utc).astimezone(ist)
+            else:
+                parsed_dt = parsed_dt.astimezone(ist)
+            date_str = parsed_dt.strftime("%d/%m/%Y")
+            time_str = parsed_dt.strftime("%I:%M:%S %p")
+        elif doc_time and str(doc_time).strip():
+            raw_t = str(doc_time).strip()
+            t_parsed = None
+            for fmt in ("%I:%M:%S %p", "%I:%M %p", "%H:%M:%S", "%H:%M"):
+                try:
+                    t_parsed = datetime.strptime(raw_t, fmt)
+                    break
+                except Exception:
+                    pass
+            if t_parsed:
+                now_utc = datetime.now(timezone.utc)
+                dt_utc = datetime(now_utc.year, now_utc.month, now_utc.day, t_parsed.hour, t_parsed.minute, t_parsed.second, tzinfo=timezone.utc)
+                dt_ist = dt_utc.astimezone(ist)
+                date_str = str(doc_date) if doc_date else dt_ist.strftime("%d/%m/%Y")
+                time_str = dt_ist.strftime("%I:%M:%S %p")
+            else:
+                date_str = str(doc_date) if doc_date else datetime.now(ist).strftime("%d/%m/%Y")
+                time_str = raw_t
+        else:
+            now_ist = datetime.now(ist)
+            date_str = str(doc_date) if doc_date else now_ist.strftime("%d/%m/%Y")
+            time_str = now_ist.strftime("%I:%M:%S %p")
 
         lat = doc.get("latitude") or doc.get("lat")
         lng = doc.get("longitude") or doc.get("lng")
@@ -1029,6 +1060,103 @@ async def get_yearly_leave_report(year: Optional[int] = None):
     return result
 
 
+@app.get("/api/leaves/monthly-report")
+async def get_monthly_leave_report(year: Optional[int] = None, month: Optional[int] = None):
+    """Return a detailed leave report across all employees for a specific month and year."""
+    db = get_previous_db()
+    if db is None:
+        return {"summary": {}, "leaves": []}
+
+    from datetime import timedelta
+    import calendar
+
+    now = datetime.now()
+    if year is None:
+        year = now.year
+    if month is None:
+        month = now.month
+
+    cursor = db.leaves.find({})
+    leaves = []
+    
+    total_days = 0
+    approved_days = 0
+    pending_days = 0
+    rejected_days = 0
+    casual_days = 0
+    sick_days = 0
+    employees_on_leave = set()
+
+    async for doc in cursor:
+        start_str = str(doc.get("start_date", doc.get("leave_date", "")))[:10]
+        end_str = str(doc.get("end_date", doc.get("leave_date", start_str)))[:10]
+        
+        try:
+            start = datetime.strptime(start_str, "%Y-%m-%d")
+            end = datetime.strptime(end_str, "%Y-%m-%d")
+        except Exception:
+            continue
+            
+        days_in_month = 0
+        current = start
+        while current <= end:
+            if current.year == year and current.month == month:
+                if current.weekday() != 6:
+                    days_in_month += 1
+            current += timedelta(days=1)
+            
+        if days_in_month > 0:
+            status = doc.get("status", "Pending")
+            leave_type = doc.get("leave_type", doc.get("type", "Leave"))
+            emp_id = doc.get("employee_id", doc.get("employeeId", ""))
+            emp_name = doc.get("employee_name", doc.get("employeeName", "N/A"))
+            
+            total_days += days_in_month
+            if status == "Approved":
+                approved_days += days_in_month
+                if emp_id: employees_on_leave.add(emp_id)
+            elif status == "Pending":
+                pending_days += days_in_month
+            elif status == "Rejected":
+                rejected_days += days_in_month
+                
+            if "Sick" in leave_type:
+                sick_days += days_in_month
+            else:
+                casual_days += days_in_month
+
+            leaves.append({
+                "id": str(doc.get("_id")),
+                "employeeId": emp_id,
+                "employeeName": emp_name,
+                "type": leave_type,
+                "startDate": start_str,
+                "endDate": end_str,
+                "daysCount": days_in_month,
+                "reason": doc.get("reason", "N/A"),
+                "status": status,
+                "attachment": doc.get("image_b64", doc.get("attachment", ""))
+            })
+
+    return {
+        "year": year,
+        "month": month,
+        "monthName": calendar.month_name[month],
+        "monthYear": f"{calendar.month_name[month]} {year}",
+        "summary": {
+            "totalDays": total_days,
+            "approvedDays": approved_days,
+            "pendingDays": pending_days,
+            "rejectedDays": rejected_days,
+            "casualDays": casual_days,
+            "sickDays": sick_days,
+            "employeesOnLeave": len(employees_on_leave),
+            "totalRequests": len(leaves)
+        },
+        "leaves": leaves
+    }
+
+
 # ─── Work Information ─────────────────────────────────────────
 class WorkInfo(BaseModel):
     head: str = ""
@@ -1103,29 +1231,70 @@ def calculate_prorated_leaves(joining_date_str: str) -> int:
 @app.get("/api/employees/{employee_id}/leave-balances")
 async def get_leave_balances(employee_id: str):
     db = get_previous_db()
-    if db is None: return {"casualTotal": 12, "casualTaken": 0, "casualRemaining": 12, "sickTotal": 12, "sickTaken": 0, "sickRemaining": 12}
-    doc = await db.leave_balances.find_one({"employee_id": employee_id}, {"_id": 0})
-    if doc:
-        return doc
+    if db is None:
+        return {"casualTotal": 12, "casualTaken": 0, "casualRemaining": 12, "sickTotal": 12, "sickTaken": 0, "sickRemaining": 12}
     
-    # Calculate default based on joining date
-    emp_doc = await db.employees.find_one({"$or": [{"employee_id": employee_id}, {"id": employee_id}]})
+    import re
+    from datetime import datetime, timedelta
+    regex_id = re.compile(f"^{re.escape(employee_id)}$", re.IGNORECASE)
+
+    emp_doc = await db.employees.find_one({"$or": [{"employee_id": regex_id}, {"id": regex_id}, {"empId": regex_id}]})
     default_leaves = 12
     if emp_doc and emp_doc.get("joining_date") and emp_doc.get("joining_date") != "N/A":
         default_leaves = calculate_prorated_leaves(emp_doc["joining_date"])
-    
-    default_doc = {
+
+    bal_doc = await db.leave_balances.find_one({"$or": [{"employee_id": regex_id}, {"employee_id": employee_id}]}, {"_id": 0})
+    casual_total = bal_doc.get("casualTotal", default_leaves) if bal_doc else default_leaves
+    sick_total = bal_doc.get("sickTotal", default_leaves) if bal_doc else default_leaves
+
+    # Count ONLY Approved leave requests for this employee (excluding Pending/Rejected)
+    cursor = db.leaves.find({"$or": [{"employee_id": regex_id}, {"id": regex_id}], "status": "Approved"})
+    casual_taken = 0
+    sick_taken = 0
+
+    async for lv in cursor:
+        leave_type = lv.get("leave_type", lv.get("type", "Leave"))
+        start_str = str(lv.get("start_date", lv.get("leave_date", "")))[:10]
+        end_str = str(lv.get("end_date", lv.get("leave_date", start_str)))[:10]
+
+        days = 0
+        if start_str and end_str:
+            try:
+                current_date = datetime.strptime(start_str, "%Y-%m-%d")
+                end_date = datetime.strptime(end_str, "%Y-%m-%d")
+                while current_date <= end_date:
+                    if current_date.weekday() != 6:  # Skip Sunday
+                        days += 1
+                    current_date += timedelta(days=1)
+            except Exception:
+                days = 1
+        else:
+            days = 1
+
+        if "Sick" in leave_type:
+            sick_taken += days
+        else:
+            casual_taken += days
+
+    casual_remaining = max(0, casual_total - casual_taken)
+    sick_remaining = max(0, sick_total - sick_taken)
+
+    result_doc = {
         "employee_id": employee_id,
-        "casualTotal": default_leaves,
-        "casualTaken": 0,
-        "casualRemaining": default_leaves,
-        "sickTotal": default_leaves,
-        "sickTaken": 0,
-        "sickRemaining": default_leaves
+        "casualTotal": casual_total,
+        "casualTaken": casual_taken,
+        "casualRemaining": casual_remaining,
+        "sickTotal": sick_total,
+        "sickTaken": sick_taken,
+        "sickRemaining": sick_remaining
     }
-    await db.leave_balances.insert_one(default_doc.copy())
-    default_doc.pop("_id", None)
-    return default_doc
+
+    await db.leave_balances.update_one(
+        {"employee_id": employee_id},
+        {"$set": result_doc},
+        upsert=True
+    )
+    return result_doc
 
 @app.put("/api/employees/{employee_id}/leave-balances")
 async def update_leave_balances(employee_id: str, balances: LeaveBalances):
@@ -1211,7 +1380,7 @@ async def update_leave_status(leave_id: str, status_update: LeaveStatusUpdate):
     emp_id = leave_doc.get("employee_id")
     if emp_id and old_status != new_status:
         # Calculate days
-        leave_type = leave_doc.get("leave_type", "Leave")
+        leave_type = leave_doc.get("leave_type", leave_doc.get("type", "Leave"))
         start_str = leave_doc.get("start_date", leave_doc.get("leave_date"))
         end_str = leave_doc.get("end_date", leave_doc.get("leave_date"))
         
@@ -1230,28 +1399,44 @@ async def update_leave_status(leave_id: str, status_update: LeaveStatusUpdate):
         
         if days > 0:
             bal_doc = await db.leave_balances.find_one({"employee_id": emp_id})
-            if bal_doc:
-                is_sick = "Sick" in leave_type
-                if new_status == "Approved":
-                    # Deduct balance
-                    if is_sick:
-                        taken = bal_doc.get("sickTaken", 0) + days
-                        remaining = max(0, bal_doc.get("sickTotal", 12) - taken)
-                        await db.leave_balances.update_one({"employee_id": emp_id}, {"$set": {"sickTaken": taken, "sickRemaining": remaining}})
-                    else:
-                        taken = bal_doc.get("casualTaken", 0) + days
-                        remaining = max(0, bal_doc.get("casualTotal", 12) - taken)
-                        await db.leave_balances.update_one({"employee_id": emp_id}, {"$set": {"casualTaken": taken, "casualRemaining": remaining}})
-                elif old_status == "Approved":
-                    # Add back balance
-                    if is_sick:
-                        taken = max(0, bal_doc.get("sickTaken", 0) - days)
-                        remaining = bal_doc.get("sickTotal", 12) - taken
-                        await db.leave_balances.update_one({"employee_id": emp_id}, {"$set": {"sickTaken": taken, "sickRemaining": remaining}})
-                    else:
-                        taken = max(0, bal_doc.get("casualTaken", 0) - days)
-                        remaining = bal_doc.get("casualTotal", 12) - taken
-                        await db.leave_balances.update_one({"employee_id": emp_id}, {"$set": {"casualTaken": taken, "casualRemaining": remaining}})
+            if not bal_doc:
+                emp_doc = await db.employees.find_one({"$or": [{"employee_id": emp_id}, {"id": emp_id}]})
+                default_leaves = 12
+                if emp_doc and emp_doc.get("joining_date") and emp_doc.get("joining_date") != "N/A":
+                    default_leaves = calculate_prorated_leaves(emp_doc["joining_date"])
+                
+                bal_doc = {
+                    "employee_id": emp_id,
+                    "casualTotal": default_leaves,
+                    "casualTaken": 0,
+                    "casualRemaining": default_leaves,
+                    "sickTotal": default_leaves,
+                    "sickTaken": 0,
+                    "sickRemaining": default_leaves
+                }
+                await db.leave_balances.insert_one(bal_doc.copy())
+
+            is_sick = "Sick" in leave_type
+            if new_status == "Approved":
+                # Deduct balance ONLY when Approved
+                if is_sick:
+                    taken = bal_doc.get("sickTaken", 0) + days
+                    remaining = max(0, bal_doc.get("sickTotal", 12) - taken)
+                    await db.leave_balances.update_one({"employee_id": emp_id}, {"$set": {"sickTaken": taken, "sickRemaining": remaining}})
+                else:
+                    taken = bal_doc.get("casualTaken", 0) + days
+                    remaining = max(0, bal_doc.get("casualTotal", 12) - taken)
+                    await db.leave_balances.update_one({"employee_id": emp_id}, {"$set": {"casualTaken": taken, "casualRemaining": remaining}})
+            elif old_status == "Approved" and (new_status == "Rejected" or new_status == "Pending"):
+                # If changed from Approved to Pending or Rejected, restore balance
+                if is_sick:
+                    taken = max(0, bal_doc.get("sickTaken", 0) - days)
+                    remaining = bal_doc.get("sickTotal", 12) - taken
+                    await db.leave_balances.update_one({"employee_id": emp_id}, {"$set": {"sickTaken": taken, "sickRemaining": remaining}})
+                else:
+                    taken = max(0, bal_doc.get("casualTaken", 0) - days)
+                    remaining = bal_doc.get("casualTotal", 12) - taken
+                    await db.leave_balances.update_one({"employee_id": emp_id}, {"$set": {"casualTaken": taken, "casualRemaining": remaining}})
     
     # Auto-generate notification for the employee
     if emp_id:
@@ -1269,6 +1454,59 @@ async def update_leave_status(leave_id: str, status_update: LeaveStatusUpdate):
         
     return {"message": "Leave status updated"}
 
+
+@app.delete("/api/leaves/{leave_id}")
+async def delete_leave_request(leave_id: str):
+    db = get_previous_db()
+    if db is None: return {"message": "Mock mode"}
+    from bson.objectid import ObjectId
+    from datetime import datetime, timedelta
+    try:
+        query = {"_id": ObjectId(leave_id)}
+    except Exception:
+        query = {"_id": leave_id}
+        
+    leave_doc = await db.leaves.find_one(query)
+    if not leave_doc:
+        return {"message": "Leave request not found"}
+        
+    status = leave_doc.get("status", "Pending")
+    emp_id = leave_doc.get("employee_id")
+    
+    # If the leave was Approved, restore balance before deleting
+    if status == "Approved" and emp_id:
+        leave_type = leave_doc.get("leave_type", "Leave")
+        start_str = leave_doc.get("start_date", leave_doc.get("leave_date"))
+        end_str = leave_doc.get("end_date", leave_doc.get("leave_date"))
+        
+        days = 0
+        if start_str and end_str:
+            try:
+                current_date = datetime.strptime(str(start_str)[:10], "%Y-%m-%d")
+                end_date = datetime.strptime(str(end_str)[:10], "%Y-%m-%d")
+                while current_date <= end_date:
+                    if current_date.weekday() != 6:
+                        days += 1
+                    current_date += timedelta(days=1)
+            except Exception:
+                days = 1
+                
+        if days > 0:
+            bal_doc = await db.leave_balances.find_one({"employee_id": emp_id})
+            if bal_doc:
+                is_sick = "Sick" in leave_type
+                if is_sick:
+                    taken = max(0, bal_doc.get("sickTaken", 0) - days)
+                    remaining = bal_doc.get("sickTotal", 12) - taken
+                    await db.leave_balances.update_one({"employee_id": emp_id}, {"$set": {"sickTaken": taken, "sickRemaining": remaining}})
+                else:
+                    taken = max(0, bal_doc.get("casualTaken", 0) - days)
+                    remaining = bal_doc.get("casualTotal", 12) - taken
+                    await db.leave_balances.update_one({"employee_id": emp_id}, {"$set": {"casualTaken": taken, "casualRemaining": remaining}})
+                    
+    await db.leaves.delete_one(query)
+    return {"message": "Leave request deleted"}
+
 # ─── Daily Updates & Activities Mutations ─────────────────────
 class DailyUpdateCreate(BaseModel):
     description: str
@@ -1283,13 +1521,19 @@ class DailyUpdateEdit(BaseModel):
 async def create_daily_update(employee_id: str, update: DailyUpdateCreate):
     db = get_previous_db()
     if db is None: return {"message": "Mock mode"}
+    from datetime import timezone, timedelta
+    ist = timezone(timedelta(hours=5, minutes=30))
+    now_ist = datetime.now(ist)
+
     doc = {
         "employee_id": employee_id,
         "notes": update.description,
         "description": update.description,
         "location": update.location,
         "images": [update.imageUrl] if update.imageUrl else [],
-        "created_at": datetime.now()
+        "date": now_ist.strftime("%d/%m/%Y"),
+        "time": now_ist.strftime("%I:%M:%S %p"),
+        "created_at": now_ist
     }
     await db.daily_updates.insert_one(doc)
     return {"message": "Update created"}
