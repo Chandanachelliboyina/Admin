@@ -16,6 +16,21 @@ interface ResetRequest {
   rejection_reason?: string;
 }
 
+const formatErrorMessage = (err: any, fallback: string = 'An error occurred'): string => {
+  if (!err) return fallback;
+  if (typeof err === 'string') return err;
+  if (Array.isArray(err)) {
+    return err.map(item => (typeof item === 'string' ? item : item?.msg || JSON.stringify(item))).join(', ');
+  }
+  if (typeof err === 'object') {
+    if (typeof err.msg === 'string') return err.msg;
+    if (typeof err.detail === 'string' || Array.isArray(err.detail)) return formatErrorMessage(err.detail, fallback);
+    if (typeof err.message === 'string') return err.message;
+    return JSON.stringify(err);
+  }
+  return String(err);
+};
+
 export function ForgotPassword() {
   const navigate = useNavigate();
   const { updateAdminPassword } = useAuth();
@@ -130,11 +145,11 @@ export function ForgotPassword() {
       }
 
       if (!res.ok) {
-        setAdminError(data.detail || data.message || 'Failed to send OTP to email. Please check backend server.');
+        setAdminError(formatErrorMessage(data.detail || data.message, 'Failed to send OTP to email. Please check backend server.'));
         return;
       }
 
-      setAdminSuccessMsg(data.message || `Verification OTP code sent to ${cleanEmail}`);
+      setAdminSuccessMsg(formatErrorMessage(data.message, `Verification OTP code sent to ${cleanEmail}`));
       setAdminStep(2);
       setResendTimer(60);
     } catch (err) {
@@ -194,7 +209,7 @@ export function ForgotPassword() {
       }
 
       if (!res.ok) {
-        setAdminError(data.detail || data.message || 'Invalid OTP code or OTP expired. Please check your email.');
+        setAdminError(formatErrorMessage(data.detail || data.message, 'Invalid OTP code or OTP expired. Please check your email.'));
         return;
       }
 
