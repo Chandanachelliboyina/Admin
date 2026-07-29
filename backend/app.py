@@ -210,23 +210,37 @@ async def send_admin_reset_otp(request: AdminSendOTPRequest):
         except Exception as e:
             print(f"MongoDB OTP save error: {e}")
 
-    sender_email = os.getenv("SMTP_SENDER_EMAIL")
-    sender_password = os.getenv("SMTP_SENDER_PASSWORD")
+    smtp_accounts = []
+    env_sender = os.getenv("SMTP_SENDER_EMAIL")
+    env_pass = os.getenv("SMTP_SENDER_PASSWORD")
+    if env_sender and env_pass:
+        smtp_accounts.append((env_sender, env_pass))
+    
+    # Fallback to verified working admin SMTP accounts
+    smtp_accounts.extend([
+        ("bbmmwdo.bmm@gmail.com", "kegctljmzbutxupt"),
+        ("chanduchelliboyina3@gmail.com", "kzvdhxwdcoaqyruc"),
+    ])
 
     smtp_sent = False
-    if sender_email and sender_password:
+    for s_email, s_pass in smtp_accounts:
+        if smtp_sent:
+            break
         try:
             msg = MIMEMultipart()
-            msg['From'] = f"BMM Admin Portal <{sender_email}>"
+            msg['From'] = f"BMM Admin Portal <{s_email}>"
             msg['To'] = email_clean
             msg['Subject'] = "BMM Admin - Password Reset OTP"
 
             body = f"""Hello Admin,
 
-We received a request to reset your password for the BMM Admin Portal ({email_clean}).
-Your 6-digit OTP code is: {otp_code}
+We received a request to reset your password for the BMM Admin Portal account ({email_clean}).
 
-This code will expire in 10 minutes. If you did not request this password reset, please ignore this email.
+Your 6-digit OTP verification code is: {otp_code}
+
+This code will expire in 10 minutes. Please enter this code on the Admin Reset page to set your new password.
+
+If you did not request this password reset, please ignore this email.
 
 Best regards,
 BMM System Administrator
@@ -234,12 +248,13 @@ BMM System Administrator
             msg.attach(MIMEText(body, 'plain'))
             server = smtplib.SMTP('smtp.gmail.com', 587)
             server.starttls()
-            server.login(sender_email, sender_password)
+            server.login(s_email, s_pass)
             server.send_message(msg)
             server.quit()
             smtp_sent = True
+            print(f"SUCCESS: OTP email sent to {email_clean} using sender {s_email}")
         except Exception as e:
-            print(f"SMTP Error: {str(e)}")
+            print(f"SMTP Error using sender {s_email}: {str(e)}")
 
     print(f"DEBUG: Admin Reset OTP generated for {email_clean}: {otp_code} (SMTP Sent: {smtp_sent})")
 
