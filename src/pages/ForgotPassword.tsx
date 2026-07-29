@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import {
   KeyRound, User, Mail, FileText, ArrowRight, CheckCircle2,
-  Clock, XCircle, Loader2, RefreshCw, AlertCircle, ShieldCheck, Lock, Eye, EyeOff, Send, Shield
+  Clock, XCircle, Loader2, RefreshCw, AlertCircle, ShieldCheck, Lock, Eye, EyeOff, Send, Shield, Check, Copy
 } from 'lucide-react';
 import { API_BASE_URL } from '../config';
 import { useAuth, ALLOWED_ADMIN_EMAILS } from '../contexts/AuthContext';
@@ -37,6 +37,7 @@ export function ForgotPassword() {
   const [adminSuccessMsg, setAdminSuccessMsg] = useState('');
   const [demoOtp, setDemoOtp] = useState<string | null>(null);
   const [resendTimer, setResendTimer] = useState(0);
+  const [copied, setCopied] = useState(false);
 
   // --- Employee Request State ---
   const [employeeStep, setEmployeeStep] = useState<1 | 2>(1);
@@ -103,7 +104,7 @@ export function ForgotPassword() {
     }
 
     if (!ALLOWED_ADMIN_EMAILS.includes(cleanEmail)) {
-      setAdminError('Unauthorized: Only authorized admin emails can request an Admin password reset.');
+      setAdminError('Unauthorized: Only authorized admin email addresses can request an Admin password reset.');
       return;
     }
 
@@ -115,24 +116,18 @@ export function ForgotPassword() {
         body: JSON.stringify({ email: cleanEmail }),
       });
       const data = await res.json();
-      if (res.ok && data.success) {
-        setAdminSuccessMsg(data.message || `OTP sent to ${cleanEmail}`);
-        if (data.otp) setDemoOtp(data.otp);
-        setAdminStep(2);
-        setResendTimer(60);
-      } else {
-        // Fallback: Generate local OTP if backend server endpoint is unreachable or fails
-        const fallbackOtp = Math.floor(100000 + Math.random() * 900000).toString();
-        setDemoOtp(fallbackOtp);
-        setAdminSuccessMsg(`OTP sent to ${cleanEmail}`);
-        setAdminStep(2);
-        setResendTimer(60);
-      }
+      
+      // Always ensure a valid 6-digit OTP code is available and displayed
+      const generatedOtp = data.otp || Math.floor(100000 + Math.random() * 900000).toString();
+      setDemoOtp(generatedOtp);
+      setAdminSuccessMsg(data.message || `OTP generated and sent for ${cleanEmail}`);
+      setAdminStep(2);
+      setResendTimer(60);
     } catch (err) {
       // Offline fallback
       const fallbackOtp = Math.floor(100000 + Math.random() * 900000).toString();
       setDemoOtp(fallbackOtp);
-      setAdminSuccessMsg(`OTP code generated for ${cleanEmail}`);
+      setAdminSuccessMsg(`OTP verification code generated for ${cleanEmail}`);
       setAdminStep(2);
       setResendTimer(60);
     } finally {
@@ -157,9 +152,9 @@ export function ForgotPassword() {
       return;
     }
 
-    // Check against demo/fallback OTP if active
+    // Check against demo/generated OTP
     if (demoOtp && otp.trim() !== demoOtp.trim()) {
-      setAdminError('Invalid OTP code. Please check and enter the correct OTP.');
+      setAdminError('Invalid OTP code. Please check the code shown above and enter it correctly.');
       return;
     }
 
@@ -190,6 +185,12 @@ export function ForgotPassword() {
     } finally {
       setIsResetting(false);
     }
+  };
+
+  const copyToClipboard = (text: string) => {
+    navigator.clipboard.writeText(text);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
   };
 
   // ----------------------------------------------------
@@ -375,8 +376,35 @@ export function ForgotPassword() {
                 {/* Step 1: Request OTP */}
                 {adminStep === 1 && (
                   <form onSubmit={handleSendAdminOtp} className="space-y-4">
+                    
+                    {/* Authorized Admin Emails Pills */}
                     <div className="space-y-1.5">
-                      <label className="text-sm font-medium text-gray-700">Admin Email Address</label>
+                      <label className="text-xs font-semibold text-gray-500 uppercase tracking-wider block">
+                        Select Authorized Admin Account:
+                      </label>
+                      <div className="flex flex-col gap-1.5">
+                        {ALLOWED_ADMIN_EMAILS.map((emailAddr) => (
+                          <button
+                            key={emailAddr}
+                            type="button"
+                            onClick={() => { setAdminEmail(emailAddr); setAdminError(''); }}
+                            className={`text-xs p-2.5 rounded-xl border text-left font-mono font-medium transition-all flex items-center justify-between ${
+                              adminEmail.toLowerCase().trim() === emailAddr.toLowerCase()
+                                ? 'bg-blue-50 text-blue-700 border-blue-300 ring-2 ring-blue-500/20 font-bold'
+                                : 'bg-gray-50 text-gray-700 border-gray-200 hover:bg-gray-100'
+                            }`}
+                          >
+                            <span className="truncate">{emailAddr}</span>
+                            {adminEmail.toLowerCase().trim() === emailAddr.toLowerCase() && (
+                              <Check className="w-4 h-4 text-blue-600 shrink-0" />
+                            )}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+
+                    <div className="space-y-1.5">
+                      <label className="text-sm font-medium text-gray-700">Or Type Admin Email Address</label>
                       <div className="relative">
                         <Mail className="absolute left-3 top-2.5 h-4 w-4 text-gray-400" />
                         <input
@@ -386,20 +414,13 @@ export function ForgotPassword() {
                           onChange={(e) => setAdminEmail(e.target.value)}
                           required
                           className="w-full pl-10 pr-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/30 focus:border-blue-400 transition-all"
-                          placeholder="e.g. chanduchelliboyina3@gmail.com"
+                          placeholder="Select above or type email..."
                         />
                       </div>
                     </div>
 
-                    <div className="p-3 bg-blue-50 border border-blue-100 rounded-xl flex items-start gap-2.5">
-                      <AlertCircle className="w-4 h-4 text-blue-600 shrink-0 mt-0.5" />
-                      <p className="text-xs text-blue-700 leading-relaxed">
-                        Enter your Admin email address to receive a 6-digit OTP code for password verification.
-                      </p>
-                    </div>
-
                     {adminError && (
-                      <div className="flex items-center gap-2 p-3 bg-rose-50 border border-rose-100 rounded-xl text-sm text-rose-600">
+                      <div className="flex items-center gap-2 p-3 bg-rose-50 border border-rose-100 rounded-xl text-xs text-rose-600">
                         <XCircle className="w-4 h-4 shrink-0" />
                         {adminError}
                       </div>
@@ -412,7 +433,7 @@ export function ForgotPassword() {
                       className="w-full py-2.5 bg-gradient-to-r from-blue-600 to-indigo-600 text-white rounded-xl font-semibold text-sm hover:opacity-90 transition-all flex justify-center items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed shadow-md"
                     >
                       {isSendingOtp ? (
-                        <><Loader2 className="w-4 h-4 animate-spin" /> Sending OTP...</>
+                        <><Loader2 className="w-4 h-4 animate-spin" /> Generating & Sending OTP...</>
                       ) : (
                         <>Send Verification OTP <Send className="w-4 h-4" /></>
                       )}
@@ -424,38 +445,53 @@ export function ForgotPassword() {
                 {adminStep === 2 && (
                   <form onSubmit={handleAdminResetSubmit} className="space-y-4">
                     
-                    {/* Success Notice / Demo OTP Alert */}
-                    {adminSuccessMsg && (
-                      <div className="p-3 bg-emerald-50 border border-emerald-100 rounded-xl flex items-center gap-2 text-xs text-emerald-700 font-medium">
-                        <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
-                        <span>{adminSuccessMsg}</span>
-                      </div>
-                    )}
-
+                    {/* HIGH VISIBILITY OTP DISPLAY BANNER */}
                     {demoOtp && (
-                      <div className="p-3 bg-amber-50 border border-amber-200 rounded-xl text-xs text-amber-800 space-y-1">
-                        <div className="font-bold flex items-center gap-1">
-                          <KeyRound className="w-3.5 h-3.5 text-amber-600" />
-                          Verification OTP Code:
+                      <div className="p-4 bg-gradient-to-r from-amber-50 via-orange-50 to-amber-50 border-2 border-amber-300 rounded-2xl shadow-md text-center space-y-2">
+                        <div className="flex items-center justify-center gap-1.5 text-xs font-extrabold text-amber-900 uppercase tracking-wider">
+                          <KeyRound className="w-4 h-4 text-amber-600 animate-pulse" />
+                          <span>YOUR 6-DIGIT VERIFICATION OTP CODE</span>
                         </div>
-                        <p className="font-mono text-base font-bold text-amber-900 tracking-wider">
+                        
+                        <div className="text-3xl font-mono font-black tracking-[0.35em] text-amber-950 py-1.5 px-4 bg-white rounded-xl border border-amber-200 shadow-inner inline-block my-1 select-all">
                           {demoOtp}
+                        </div>
+
+                        <div className="flex items-center justify-center gap-2 pt-1">
+                          <button
+                            type="button"
+                            onClick={() => { setOtp(demoOtp); setAdminError(''); }}
+                            className="px-3.5 py-1.5 bg-gradient-to-r from-amber-600 to-orange-600 text-white rounded-lg text-xs font-bold hover:opacity-90 transition-all shadow-sm flex items-center gap-1"
+                          >
+                            <Check className="w-3.5 h-3.5" />
+                            Auto-Fill OTP Code
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => copyToClipboard(demoOtp)}
+                            className="px-3.5 py-1.5 bg-white border border-amber-300 text-amber-800 rounded-lg text-xs font-bold hover:bg-amber-100 transition-all flex items-center gap-1"
+                          >
+                            {copied ? <Check className="w-3.5 h-3.5 text-emerald-600" /> : <Copy className="w-3.5 h-3.5" />}
+                            {copied ? 'Copied!' : 'Copy Code'}
+                          </button>
+                        </div>
+                        <p className="text-[11px] text-amber-800 font-medium pt-1">
+                          Click <strong>Auto-Fill OTP Code</strong> above or type the 6 digits below.
                         </p>
-                        <p className="text-[11px] text-amber-700">Enter this code below to proceed.</p>
                       </div>
                     )}
 
                     {/* OTP Code Input */}
                     <div className="space-y-1.5">
                       <div className="flex items-center justify-between">
-                        <label className="text-sm font-medium text-gray-700">6-Digit OTP Code</label>
+                        <label className="text-sm font-medium text-gray-700">Enter 6-Digit OTP Code</label>
                         <button
                           type="button"
                           onClick={() => handleSendAdminOtp()}
                           disabled={resendTimer > 0 || isSendingOtp}
                           className="text-xs text-blue-600 font-medium hover:underline disabled:text-gray-400 disabled:no-underline"
                         >
-                          {resendTimer > 0 ? `Resend OTP in ${resendTimer}s` : 'Resend OTP'}
+                          {resendTimer > 0 ? `Resend in ${resendTimer}s` : 'Resend New OTP'}
                         </button>
                       </div>
                       <div className="relative">
@@ -532,7 +568,7 @@ export function ForgotPassword() {
                     </div>
 
                     {adminError && (
-                      <div className="flex items-center gap-2 p-3 bg-rose-50 border border-rose-100 rounded-xl text-sm text-rose-600">
+                      <div className="flex items-center gap-2 p-3 bg-rose-50 border border-rose-100 rounded-xl text-xs text-rose-600">
                         <XCircle className="w-4 h-4 shrink-0" />
                         {adminError}
                       </div>
