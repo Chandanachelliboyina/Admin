@@ -35,7 +35,6 @@ export function ForgotPassword() {
   const [isResetting, setIsResetting] = useState(false);
   const [adminError, setAdminError] = useState('');
   const [adminSuccessMsg, setAdminSuccessMsg] = useState('');
-  const [demoOtp, setDemoOtp] = useState<string | null>(null);
   const [resendTimer, setResendTimer] = useState(0);
 
   // --- Employee Request State ---
@@ -90,11 +89,10 @@ export function ForgotPassword() {
   // ----------------------------------------------------
   // Admin Handlers
   // ----------------------------------------------------
-  const handleSendAdminOtp = (e?: React.FormEvent) => {
+  const handleSendAdminOtp = async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
     setAdminError('');
     setAdminSuccessMsg('');
-    setDemoOtp(null);
 
     const cleanEmail = adminEmail.trim().toLowerCase();
     if (!cleanEmail || !cleanEmail.includes('@')) {
@@ -108,41 +106,29 @@ export function ForgotPassword() {
     }
 
     setIsSendingOtp(true);
-
-    // Generate local 6-digit OTP code for instant resilience across local & deployed environments
-    const generatedOtp = Math.floor(100000 + Math.random() * 900000).toString();
-    setDemoOtp(generatedOtp);
-    localStorage.setItem(`admin_otp_${cleanEmail}`, JSON.stringify({
-      otp: generatedOtp,
-      expiresAt: Date.now() + 600000 // 10 minutes
-    }));
-    console.log(`[BMM ADMIN OTP] Verification OTP code for ${cleanEmail} is: ${generatedOtp}`);
-
-    // Fire non-blocking API request to backend (for email delivery when backend is available)
     try {
-      fetch(`${API_BASE_URL}/api/auth/admin-forgot-password/send-otp`, {
+      const res = await fetch(`${API_BASE_URL}/api/auth/admin-forgot-password/send-otp`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email: cleanEmail }),
-      }).then(res => res.json())
-        .then(data => {
-          if (data && data.otp) setDemoOtp(data.otp);
-        })
-        .catch(err => console.log('Backend API fetch notice (offline/deployed):', err));
-    } catch (err) {
-      console.log('Background fetch catch:', err);
-    }
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setAdminError(data.detail || 'Failed to send OTP to email. Please check backend.');
+        return;
+      }
 
-    // Immediately transition UI to Step 2 so deployment link never hangs or errors out
-    setTimeout(() => {
-      setIsSendingOtp(false);
-      setAdminSuccessMsg(`Verification OTP code generated and sent to ${cleanEmail}.`);
+      setAdminSuccessMsg(data.message || `Verification OTP code sent to ${cleanEmail}`);
       setAdminStep(2);
       setResendTimer(60);
-    }, 400);
+    } catch (err) {
+      setAdminError('Could not connect to backend server to send OTP. Please check your backend connection.');
+    } finally {
+      setIsSendingOtp(false);
+    }
   };
 
-  const handleAdminResetSubmit = (e: React.FormEvent) => {
+  const handleAdminResetSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setAdminError('');
 
@@ -150,7 +136,7 @@ export function ForgotPassword() {
     const inputOtp = otp.trim();
 
     if (!inputOtp || inputOtp.length < 4) {
-      setAdminError('Please enter the 6-digit OTP code.');
+      setAdminError('Please enter the 6-digit OTP code received in your email.');
       return;
     }
     if (adminNewPassword.length < 6) {
@@ -163,10 +149,8 @@ export function ForgotPassword() {
     }
 
     setIsResetting(true);
-
-    // Asynchronously notify backend if online
     try {
-      fetch(`${API_BASE_URL}/api/auth/admin-forgot-password/reset`, {
+      const res = await fetch(`${API_BASE_URL}/api/auth/admin-forgot-password/reset`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -174,44 +158,21 @@ export function ForgotPassword() {
           otp: inputOtp,
           new_password: adminNewPassword,
         }),
-      }).catch(err => console.log('Backend reset notice:', err));
-    } catch (e) {
-      console.log(e);
-    }
-
-    // Check stored OTP code or demo OTP
-    const storedOtpDataRaw = localStorage.getItem(`admin_otp_${cleanEmail}`);
-    let validOtp = false;
-
-    if (storedOtpDataRaw) {
-      try {
-        const stored = JSON.parse(storedOtpDataRaw);
-        if (stored.otp === inputOtp && stored.expiresAt > Date.now()) {
-          validOtp = true;
-        }
-      } catch (err) {
-        console.error(err);
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setAdminError(data.detail || 'Invalid OTP code or OTP expired. Please check your email.');
+        return;
       }
-    }
 
-    if (demoOtp && inputOtp === demoOtp) {
-      validOtp = true;
-    }
-
-    // Accept valid OTP or fallback 6-digit code in deployment fallback
-    if (!validOtp && inputOtp !== '123456' && inputOtp.length !== 6) {
-      setAdminError('Invalid OTP code. Please enter the correct 6-digit verification OTP code.');
-      setIsResetting(false);
-      return;
-    }
-
-    setTimeout(() => {
-      // Save new password in AuthContext & localStorage
+      // Save updated password in AuthContext & localStorage
       updateAdminPassword(cleanEmail, adminNewPassword);
-      localStorage.removeItem(`admin_otp_${cleanEmail}`);
-      setIsResetting(false);
       setAdminStep(3);
-    }, 400);
+    } catch (err) {
+      setAdminError('Could not connect to backend server to verify OTP. Please try again.');
+    } finally {
+      setIsResetting(false);
+    }
   };
 
   // ----------------------------------------------------
@@ -327,7 +288,7 @@ export function ForgotPassword() {
           <h1 className="text-2xl font-bold text-gray-900">Forgot Password</h1>
           <p className="text-gray-500 text-sm mt-1">
             {activeTab === 'admin' 
-              ? 'Reset Admin password via OTP verification' 
+              ? 'Reset Admin password via OTP sent to your email' 
               : 'Submit request for Admin review and approval'}
           </p>
         </div>
@@ -443,7 +404,7 @@ export function ForgotPassword() {
                     <div className="p-3 bg-blue-50 border border-blue-100 rounded-xl flex items-start gap-2.5">
                       <AlertCircle className="w-4 h-4 text-blue-600 shrink-0 mt-0.5" />
                       <p className="text-xs text-blue-700 leading-relaxed">
-                        A 6-digit OTP code will be generated for your email address. Check your email or use the generated code to reset password.
+                        A 6-digit OTP code will be sent to your Gmail inbox. Open your email to retrieve the code.
                       </p>
                     </div>
 
@@ -461,7 +422,7 @@ export function ForgotPassword() {
                       className="w-full py-2.5 bg-gradient-to-r from-blue-600 to-indigo-600 text-white rounded-xl font-semibold text-sm hover:opacity-90 transition-all flex justify-center items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed shadow-md"
                     >
                       {isSendingOtp ? (
-                        <><Loader2 className="w-4 h-4 animate-spin" /> Generating OTP...</>
+                        <><Loader2 className="w-4 h-4 animate-spin" /> Sending OTP to Email...</>
                       ) : (
                         <>Send Verification OTP <Send className="w-4 h-4" /></>
                       )}
@@ -473,39 +434,22 @@ export function ForgotPassword() {
                 {adminStep === 2 && (
                   <form onSubmit={handleAdminResetSubmit} className="space-y-4">
                     
-                    {/* EMAIL SENT & OTP DISPLAY CARD */}
-                    <div className="p-4 bg-gradient-to-r from-blue-50 via-indigo-50 to-blue-50 border border-blue-200 rounded-2xl space-y-2">
-                      <div className="flex items-center gap-2">
-                        <Mail className="w-4 h-4 text-blue-600 shrink-0" />
-                        <h4 className="text-xs font-bold text-blue-900 uppercase tracking-wider">
-                          OTP Sent to Email
-                        </h4>
+                    {/* EMAIL SENT CONFIRMATION CARD */}
+                    <div className="p-4 bg-gradient-to-r from-blue-50 via-indigo-50 to-blue-50 border border-blue-200 rounded-2xl flex items-start gap-3">
+                      <div className="p-2.5 bg-blue-600 text-white rounded-xl shrink-0 shadow-xs">
+                        <Mail className="w-5 h-5" />
                       </div>
-                      <p className="text-xs text-blue-800 leading-relaxed">
-                        We sent a verification code to <strong className="text-blue-950 underline">{adminEmail}</strong>.
-                      </p>
-                      {adminSuccessMsg && (
-                        <p className="text-[11px] text-blue-700 font-medium mt-0.5">{adminSuccessMsg}</p>
-                      )}
-
-                      {demoOtp && (
-                        <div className="p-3 bg-white border border-amber-200 rounded-xl text-center mt-2 space-y-1.5">
-                          <div className="text-[11px] font-bold text-amber-800 uppercase tracking-wider">
-                            Verification OTP Code:
-                          </div>
-                          <div className="text-2xl font-mono font-black tracking-[0.3em] text-amber-950">
-                            {demoOtp}
-                          </div>
-                          <button
-                            type="button"
-                            onClick={() => { setOtp(demoOtp); setAdminError(''); }}
-                            className="px-3 py-1 bg-amber-600 text-white rounded-lg text-xs font-bold hover:bg-amber-700 transition-all inline-flex items-center gap-1 shadow-xs"
-                          >
-                            <Check className="w-3.5 h-3.5" />
-                            Auto-Fill OTP Code
-                          </button>
-                        </div>
-                      )}
+                      <div className="space-y-1">
+                        <h4 className="text-xs font-bold text-blue-900 uppercase tracking-wider">
+                          Verification OTP Sent to Admin Email
+                        </h4>
+                        <p className="text-xs text-blue-800 leading-relaxed">
+                          A 6-digit OTP code has been sent to <strong className="text-blue-950 underline">{adminEmail}</strong>. Please open your Gmail inbox to retrieve the code and enter it below.
+                        </p>
+                        {adminSuccessMsg && (
+                          <p className="text-[11px] text-blue-700 font-medium mt-0.5">{adminSuccessMsg}</p>
+                        )}
+                      </div>
                     </div>
 
                     {/* OTP Code Input */}
@@ -518,7 +462,7 @@ export function ForgotPassword() {
                           disabled={resendTimer > 0 || isSendingOtp}
                           className="text-xs text-blue-600 font-medium hover:underline disabled:text-gray-400 disabled:no-underline"
                         >
-                          {resendTimer > 0 ? `Resend in ${resendTimer}s` : 'Resend OTP'}
+                          {resendTimer > 0 ? `Resend in ${resendTimer}s` : 'Resend Email OTP'}
                         </button>
                       </div>
                       <div className="relative">
