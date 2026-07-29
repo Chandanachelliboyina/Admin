@@ -245,8 +245,7 @@ BMM System Administrator
 
     return {
         "success": True,
-        "message": f"OTP sent to {email_clean}",
-        "otp": otp_code,
+        "message": f"Verification OTP code sent to {email_clean}. Please check your email inbox.",
         "smtp_sent": smtp_sent
     }
 

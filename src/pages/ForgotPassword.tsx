@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import {
   KeyRound, User, Mail, FileText, ArrowRight, CheckCircle2,
-  Clock, XCircle, Loader2, RefreshCw, AlertCircle, ShieldCheck, Lock, Eye, EyeOff, Send, Shield, Check, Copy
+  Clock, XCircle, Loader2, RefreshCw, AlertCircle, ShieldCheck, Lock, Eye, EyeOff, Send, Shield, Check
 } from 'lucide-react';
 import { API_BASE_URL } from '../config';
 import { useAuth, ALLOWED_ADMIN_EMAILS } from '../contexts/AuthContext';
@@ -35,9 +35,7 @@ export function ForgotPassword() {
   const [isResetting, setIsResetting] = useState(false);
   const [adminError, setAdminError] = useState('');
   const [adminSuccessMsg, setAdminSuccessMsg] = useState('');
-  const [demoOtp, setDemoOtp] = useState<string | null>(null);
   const [resendTimer, setResendTimer] = useState(0);
-  const [copied, setCopied] = useState(false);
 
   // --- Employee Request State ---
   const [employeeStep, setEmployeeStep] = useState<1 | 2>(1);
@@ -95,7 +93,6 @@ export function ForgotPassword() {
     if (e) e.preventDefault();
     setAdminError('');
     setAdminSuccessMsg('');
-    setDemoOtp(null);
 
     const cleanEmail = adminEmail.trim().toLowerCase();
     if (!cleanEmail || !cleanEmail.includes('@')) {
@@ -116,20 +113,16 @@ export function ForgotPassword() {
         body: JSON.stringify({ email: cleanEmail }),
       });
       const data = await res.json();
+      if (!res.ok) {
+        setAdminError(data.detail || 'Failed to send OTP to email. Please check backend configuration.');
+        return;
+      }
       
-      // Always ensure a valid 6-digit OTP code is available and displayed
-      const generatedOtp = data.otp || Math.floor(100000 + Math.random() * 900000).toString();
-      setDemoOtp(generatedOtp);
-      setAdminSuccessMsg(data.message || `OTP generated and sent for ${cleanEmail}`);
+      setAdminSuccessMsg(data.message || `Verification OTP sent to ${cleanEmail}`);
       setAdminStep(2);
       setResendTimer(60);
     } catch (err) {
-      // Offline fallback
-      const fallbackOtp = Math.floor(100000 + Math.random() * 900000).toString();
-      setDemoOtp(fallbackOtp);
-      setAdminSuccessMsg(`OTP verification code generated for ${cleanEmail}`);
-      setAdminStep(2);
-      setResendTimer(60);
+      setAdminError('Could not connect to server to send email. Please ensure backend is running.');
     } finally {
       setIsSendingOtp(false);
     }
@@ -140,7 +133,7 @@ export function ForgotPassword() {
     setAdminError('');
 
     if (!otp || otp.trim().length < 4) {
-      setAdminError('Please enter the 6-digit OTP code.');
+      setAdminError('Please enter the 6-digit OTP code received in your email.');
       return;
     }
     if (adminNewPassword.length < 6) {
@@ -149,12 +142,6 @@ export function ForgotPassword() {
     }
     if (adminNewPassword !== adminConfirmPassword) {
       setAdminError('Passwords do not match. Please re-enter.');
-      return;
-    }
-
-    // Check against demo/generated OTP
-    if (demoOtp && otp.trim() !== demoOtp.trim()) {
-      setAdminError('Invalid OTP code. Please check the code shown above and enter it correctly.');
       return;
     }
 
@@ -170,27 +157,19 @@ export function ForgotPassword() {
         }),
       });
       const data = await res.json();
-      if (!res.ok && !demoOtp) {
-        setAdminError(data.detail || 'Failed to reset password. Invalid OTP or request expired.');
+      if (!res.ok) {
+        setAdminError(data.detail || 'Invalid OTP code or OTP expired. Please check your email.');
         return;
       }
       
-      // Update local storage credentials
+      // Update local credentials
       updateAdminPassword(adminEmail.trim(), adminNewPassword);
       setAdminStep(3);
     } catch (err) {
-      // Offline fallback success using local context
-      updateAdminPassword(adminEmail.trim(), adminNewPassword);
-      setAdminStep(3);
+      setAdminError('Could not connect to server. Please check your network connection.');
     } finally {
       setIsResetting(false);
     }
-  };
-
-  const copyToClipboard = (text: string) => {
-    navigator.clipboard.writeText(text);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
   };
 
   // ----------------------------------------------------
@@ -306,7 +285,7 @@ export function ForgotPassword() {
           <h1 className="text-2xl font-bold text-gray-900">Forgot Password</h1>
           <p className="text-gray-500 text-sm mt-1">
             {activeTab === 'admin' 
-              ? 'Reset Admin password instantly via OTP verification' 
+              ? 'Reset Admin password via OTP sent to your email' 
               : 'Submit request for Admin review and approval'}
           </p>
         </div>
@@ -419,6 +398,13 @@ export function ForgotPassword() {
                       </div>
                     </div>
 
+                    <div className="p-3 bg-blue-50 border border-blue-100 rounded-xl flex items-start gap-2.5">
+                      <AlertCircle className="w-4 h-4 text-blue-600 shrink-0 mt-0.5" />
+                      <p className="text-xs text-blue-700 leading-relaxed">
+                        A 6-digit OTP code will be sent to your Gmail inbox. Check your email to retrieve the code.
+                      </p>
+                    </div>
+
                     {adminError && (
                       <div className="flex items-center gap-2 p-3 bg-rose-50 border border-rose-100 rounded-xl text-xs text-rose-600">
                         <XCircle className="w-4 h-4 shrink-0" />
@@ -433,7 +419,7 @@ export function ForgotPassword() {
                       className="w-full py-2.5 bg-gradient-to-r from-blue-600 to-indigo-600 text-white rounded-xl font-semibold text-sm hover:opacity-90 transition-all flex justify-center items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed shadow-md"
                     >
                       {isSendingOtp ? (
-                        <><Loader2 className="w-4 h-4 animate-spin" /> Generating & Sending OTP...</>
+                        <><Loader2 className="w-4 h-4 animate-spin" /> Sending OTP to Email...</>
                       ) : (
                         <>Send Verification OTP <Send className="w-4 h-4" /></>
                       )}
@@ -445,41 +431,23 @@ export function ForgotPassword() {
                 {adminStep === 2 && (
                   <form onSubmit={handleAdminResetSubmit} className="space-y-4">
                     
-                    {/* HIGH VISIBILITY OTP DISPLAY BANNER */}
-                    {demoOtp && (
-                      <div className="p-4 bg-gradient-to-r from-amber-50 via-orange-50 to-amber-50 border-2 border-amber-300 rounded-2xl shadow-md text-center space-y-2">
-                        <div className="flex items-center justify-center gap-1.5 text-xs font-extrabold text-amber-900 uppercase tracking-wider">
-                          <KeyRound className="w-4 h-4 text-amber-600 animate-pulse" />
-                          <span>YOUR 6-DIGIT VERIFICATION OTP CODE</span>
-                        </div>
-                        
-                        <div className="text-3xl font-mono font-black tracking-[0.35em] text-amber-950 py-1.5 px-4 bg-white rounded-xl border border-amber-200 shadow-inner inline-block my-1 select-all">
-                          {demoOtp}
-                        </div>
-
-                        <div className="flex items-center justify-center gap-2 pt-1">
-                          <button
-                            type="button"
-                            onClick={() => { setOtp(demoOtp); setAdminError(''); }}
-                            className="px-3.5 py-1.5 bg-gradient-to-r from-amber-600 to-orange-600 text-white rounded-lg text-xs font-bold hover:opacity-90 transition-all shadow-sm flex items-center gap-1"
-                          >
-                            <Check className="w-3.5 h-3.5" />
-                            Auto-Fill OTP Code
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => copyToClipboard(demoOtp)}
-                            className="px-3.5 py-1.5 bg-white border border-amber-300 text-amber-800 rounded-lg text-xs font-bold hover:bg-amber-100 transition-all flex items-center gap-1"
-                          >
-                            {copied ? <Check className="w-3.5 h-3.5 text-emerald-600" /> : <Copy className="w-3.5 h-3.5" />}
-                            {copied ? 'Copied!' : 'Copy Code'}
-                          </button>
-                        </div>
-                        <p className="text-[11px] text-amber-800 font-medium pt-1">
-                          Click <strong>Auto-Fill OTP Code</strong> above or type the 6 digits below.
-                        </p>
+                    {/* EMAIL SENT CONFIRMATION BOX */}
+                    <div className="p-4 bg-blue-50 border border-blue-100 rounded-2xl flex items-start gap-3">
+                      <div className="p-2 bg-blue-600 text-white rounded-xl shrink-0">
+                        <Mail className="w-5 h-5" />
                       </div>
-                    )}
+                      <div className="space-y-1">
+                        <h4 className="text-xs font-bold text-blue-900 uppercase tracking-wider">
+                          OTP Sent to Email
+                        </h4>
+                        <p className="text-xs text-blue-800 leading-relaxed">
+                          We sent a 6-digit verification code to <strong className="text-blue-950 underline">{adminEmail}</strong>. Please check your Gmail inbox and enter the code below.
+                        </p>
+                        {adminSuccessMsg && (
+                          <p className="text-[11px] text-blue-700 font-medium mt-1">{adminSuccessMsg}</p>
+                        )}
+                      </div>
+                    </div>
 
                     {/* OTP Code Input */}
                     <div className="space-y-1.5">
@@ -491,7 +459,7 @@ export function ForgotPassword() {
                           disabled={resendTimer > 0 || isSendingOtp}
                           className="text-xs text-blue-600 font-medium hover:underline disabled:text-gray-400 disabled:no-underline"
                         >
-                          {resendTimer > 0 ? `Resend in ${resendTimer}s` : 'Resend New OTP'}
+                          {resendTimer > 0 ? `Resend in ${resendTimer}s` : 'Resend Email OTP'}
                         </button>
                       </div>
                       <div className="relative">
@@ -589,7 +557,7 @@ export function ForgotPassword() {
                         className="w-2/3 py-2.5 bg-gradient-to-r from-blue-600 to-indigo-600 text-white rounded-xl font-semibold text-sm hover:opacity-90 transition-all flex justify-center items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed shadow-md"
                       >
                         {isResetting ? (
-                          <><Loader2 className="w-4 h-4 animate-spin" /> Resetting...</>
+                          <><Loader2 className="w-4 h-4 animate-spin" /> Verifying & Resetting...</>
                         ) : (
                           <>Reset Password <ArrowRight className="w-4 h-4" /></>
                         )}
