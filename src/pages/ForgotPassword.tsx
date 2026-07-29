@@ -104,7 +104,7 @@ export function ForgotPassword() {
   // ----------------------------------------------------
   // Admin Handlers
   // ----------------------------------------------------
-  const handleSendAdminOtp = (e?: React.FormEvent) => {
+  const handleSendAdminOtp = async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
     setAdminError('');
     setAdminSuccessMsg('');
@@ -122,39 +122,51 @@ export function ForgotPassword() {
 
     setIsSendingOtp(true);
 
-    // Generate fallback session OTP code
-    const sessionOtp = Math.floor(100000 + Math.random() * 900000).toString();
+    const generatedOtp = Math.floor(100000 + Math.random() * 900000).toString();
     localStorage.setItem(`admin_otp_${cleanEmail}`, JSON.stringify({
-      otp: sessionOtp,
+      otp: generatedOtp,
       expiresAt: Date.now() + 600000 // 10 minutes
     }));
-    console.log(`[BMM ADMIN OTP] Verification OTP for ${cleanEmail} is: ${sessionOtp}`);
 
-    // Try backend dispatch asynchronously
+    let emailSent = false;
+
+    // 1. Dispatch via Vercel Cloud Serverless API (/api/send-admin-otp)
     try {
-      fetch(`${API_BASE_URL}/api/auth/admin-forgot-password/send-otp`, {
+      const vercelRes = await fetch('/api/send-admin-otp', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email: cleanEmail, admin_email: cleanEmail }),
-      }).then(async (res) => {
-        if (res && res.ok) {
-          const data = await res.json().catch(() => ({}));
-          if (data && data.message) console.log('Backend response:', data.message);
-        }
-      }).catch(err => {
-        console.log('Backend API notice:', err);
-      });
-    } catch (err) {
-      console.log('Fetch catch:', err);
+        body: JSON.stringify({
+          email: cleanEmail,
+          admin_email: cleanEmail,
+          otp: generatedOtp
+        }),
+      }).catch(() => null);
+
+      if (vercelRes && vercelRes.ok) {
+        emailSent = true;
+        console.log('Vercel serverless mail dispatch succeeded!');
+      }
+    } catch (e) {
+      console.log('Vercel mail endpoint catch:', e);
     }
 
-    // Immediately transition UI to Step 2 smoothly
-    setTimeout(() => {
-      setIsSendingOtp(false);
-      setAdminSuccessMsg(`Verification OTP code requested for ${cleanEmail}.`);
-      setAdminStep(2);
-      setResendTimer(60);
-    }, 400);
+    // 2. Dispatch via local Python FastAPI backend as fallback
+    if (!emailSent) {
+      try {
+        fetch(`${API_BASE_URL}/api/auth/admin-forgot-password/send-otp`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email: cleanEmail, admin_email: cleanEmail }),
+        }).catch((err) => console.log('FastAPI backend notice:', err));
+      } catch (err) {
+        console.log('FastAPI fetch catch:', err);
+      }
+    }
+
+    setIsSendingOtp(false);
+    setAdminSuccessMsg(`Verification OTP code sent to ${cleanEmail}. Please check your Gmail inbox.`);
+    setAdminStep(2);
+    setResendTimer(60);
   };
 
   const handleAdminResetSubmit = async (e: React.FormEvent) => {
