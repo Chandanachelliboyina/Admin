@@ -167,14 +167,58 @@ BMM System Administrator
         raise HTTPException(status_code=500, detail=f"Failed to send email: {str(e)}")
 
 
-admin_otps_store = {}
-
-@app.post("/api/auth/admin-forgot-password/send-otp")
-async def send_admin_reset_otp(request: AdminSendOTPRequest):
-    import random, os
-    from datetime import datetime, timedelta, timezone
+def dispatch_admin_otp_email_async(email_clean: str, otp_code: str):
+    import os
     from dotenv import load_dotenv
     load_dotenv()
+
+    smtp_accounts = []
+    env_sender = os.getenv("SMTP_SENDER_EMAIL")
+    env_pass = os.getenv("SMTP_SENDER_PASSWORD")
+    if env_sender and env_pass:
+        smtp_accounts.append((env_sender, env_pass))
+    
+    smtp_accounts.extend([
+        ("bbmmwdo.bmm@gmail.com", "kegctljmzbutxupt"),
+        ("chanduchelliboyina3@gmail.com", "kzvdhxwdcoaqyruc"),
+    ])
+
+    for s_email, s_pass in smtp_accounts:
+        try:
+            msg = MIMEMultipart()
+            msg['From'] = f"BMM Admin Portal <{s_email}>"
+            msg['To'] = email_clean
+            msg['Subject'] = "BMM Admin - Password Reset OTP"
+
+            body = f"""Hello Admin,
+
+We received a request to reset your password for the BMM Admin Portal account ({email_clean}).
+
+Your 6-digit OTP verification code is: {otp_code}
+
+This code will expire in 10 minutes. Please enter this code on the Admin Reset page to set your new password.
+
+If you did not request this password reset, please ignore this email.
+
+Best regards,
+BMM System Administrator
+"""
+            msg.attach(MIMEText(body, 'plain'))
+            server = smtplib.SMTP('smtp.gmail.com', 587)
+            server.starttls()
+            server.login(s_email, s_pass)
+            server.send_message(msg)
+            server.quit()
+            print(f"SUCCESS: OTP email sent to {email_clean} using sender {s_email}")
+            break
+        except Exception as e:
+            print(f"SMTP Error using sender {s_email}: {str(e)}")
+
+
+@app.post("/api/auth/admin-forgot-password/send-otp")
+async def send_admin_reset_otp(request: AdminSendOTPRequest, background_tasks: BackgroundTasks):
+    import random
+    from datetime import datetime, timedelta, timezone
 
     email_clean = request.email.strip().lower()
     if not email_clean or "@" not in email_clean:
@@ -210,58 +254,13 @@ async def send_admin_reset_otp(request: AdminSendOTPRequest):
         except Exception as e:
             print(f"MongoDB OTP save error: {e}")
 
-    smtp_accounts = []
-    env_sender = os.getenv("SMTP_SENDER_EMAIL")
-    env_pass = os.getenv("SMTP_SENDER_PASSWORD")
-    if env_sender and env_pass:
-        smtp_accounts.append((env_sender, env_pass))
-    
-    # Fallback to verified working admin SMTP accounts
-    smtp_accounts.extend([
-        ("bbmmwdo.bmm@gmail.com", "kegctljmzbutxupt"),
-        ("chanduchelliboyina3@gmail.com", "kzvdhxwdcoaqyruc"),
-    ])
-
-    smtp_sent = False
-    for s_email, s_pass in smtp_accounts:
-        if smtp_sent:
-            break
-        try:
-            msg = MIMEMultipart()
-            msg['From'] = f"BMM Admin Portal <{s_email}>"
-            msg['To'] = email_clean
-            msg['Subject'] = "BMM Admin - Password Reset OTP"
-
-            body = f"""Hello Admin,
-
-We received a request to reset your password for the BMM Admin Portal account ({email_clean}).
-
-Your 6-digit OTP verification code is: {otp_code}
-
-This code will expire in 10 minutes. Please enter this code on the Admin Reset page to set your new password.
-
-If you did not request this password reset, please ignore this email.
-
-Best regards,
-BMM System Administrator
-"""
-            msg.attach(MIMEText(body, 'plain'))
-            server = smtplib.SMTP('smtp.gmail.com', 587)
-            server.starttls()
-            server.login(s_email, s_pass)
-            server.send_message(msg)
-            server.quit()
-            smtp_sent = True
-            print(f"SUCCESS: OTP email sent to {email_clean} using sender {s_email}")
-        except Exception as e:
-            print(f"SMTP Error using sender {s_email}: {str(e)}")
-
-    print(f"DEBUG: Admin Reset OTP generated for {email_clean}: {otp_code} (SMTP Sent: {smtp_sent})")
+    # Dispatch email asynchronously in background task (instant response!)
+    background_tasks.add_task(dispatch_admin_otp_email_async, email_clean, otp_code)
+    print(f"DEBUG: Admin Reset OTP generated for {email_clean}: {otp_code} (Queued in background)")
 
     return {
         "success": True,
-        "message": f"Verification OTP code sent to {email_clean}. Please check your email inbox.",
-        "smtp_sent": smtp_sent
+        "message": f"Verification OTP code sent to {email_clean}. Please check your Gmail inbox."
     }
 
 
