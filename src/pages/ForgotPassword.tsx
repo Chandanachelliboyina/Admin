@@ -125,7 +125,7 @@ export function ForgotPassword() {
       const res = await fetch(`${API_BASE_URL}/api/auth/admin-forgot-password/send-otp`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email: cleanEmail }),
+        body: JSON.stringify({ email: cleanEmail, admin_email: cleanEmail }),
       }).catch((err) => {
         console.warn('Network fetch catch:', err);
         return null;
@@ -187,6 +187,7 @@ export function ForgotPassword() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           email: cleanEmail,
+          admin_email: cleanEmail,
           otp: inputOtp,
           new_password: adminNewPassword,
         }),

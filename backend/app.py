@@ -67,12 +67,14 @@ class OTPRequest(BaseModel):
     otp: str
 
 class AdminSendOTPRequest(BaseModel):
-    email: str
+    email: Optional[str] = None
+    admin_email: Optional[str] = None
 
 class AdminResetPasswordRequest(BaseModel):
-    email: str
-    otp: str
-    new_password: str
+    email: Optional[str] = None
+    admin_email: Optional[str] = None
+    otp: Optional[str] = None
+    new_password: Optional[str] = None
 
 class HolidayBase(BaseModel):
     name: str
@@ -220,9 +222,10 @@ async def send_admin_reset_otp(request: AdminSendOTPRequest, background_tasks: B
     import random
     from datetime import datetime, timedelta, timezone
 
-    email_clean = request.email.strip().lower()
+    target_email = request.email or request.admin_email or ""
+    email_clean = target_email.strip().lower()
     if not email_clean or "@" not in email_clean:
-        raise HTTPException(status_code=400, detail="Invalid email address provided.")
+        raise HTTPException(status_code=400, detail="Please select or enter a valid admin email address.")
 
     ALLOWED_ADMIN_EMAILS = [
         "chanduchelliboyina3@gmail.com",
@@ -267,19 +270,22 @@ async def send_admin_reset_otp(request: AdminSendOTPRequest, background_tasks: B
 @app.post("/api/auth/admin-forgot-password/reset")
 async def reset_admin_password(request: AdminResetPasswordRequest):
     from datetime import datetime, timezone
-    email_clean = request.email.strip().lower()
-    otp_code = request.otp.strip()
-    new_password = request.new_password.strip()
+    target_email = (request.email or request.admin_email or "").strip().lower()
+    otp_code = (request.otp or "").strip()
+    new_password = (request.new_password or "").strip()
+
+    if not target_email or "@" not in target_email:
+        raise HTTPException(status_code=400, detail="Please enter a valid admin email address.")
 
     if not new_password or len(new_password) < 6:
         raise HTTPException(status_code=400, detail="New password must be at least 6 characters.")
 
-    record = admin_otps_store.get(email_clean)
+    record = admin_otps_store.get(target_email)
     db = get_db()
     
     if not record and db is not None:
         try:
-            db_doc = await db.admin_otps.find_one({"email": email_clean})
+            db_doc = await db.admin_otps.find_one({"email": target_email})
             if db_doc:
                 record = {
                     "otp": db_doc.get("otp"),
