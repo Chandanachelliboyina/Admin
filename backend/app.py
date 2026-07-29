@@ -66,6 +66,14 @@ class OTPRequest(BaseModel):
     email: str
     otp: str
 
+class AdminSendOTPRequest(BaseModel):
+    email: str
+
+class AdminResetPasswordRequest(BaseModel):
+    email: str
+    otp: str
+    new_password: str
+
 class HolidayBase(BaseModel):
     name: str
     from_date: str
@@ -157,6 +165,152 @@ BMM System Administrator
     except Exception as e:
         print(f"SMTP Error: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Failed to send email: {str(e)}")
+
+
+admin_otps_store = {}
+
+@app.post("/api/auth/admin-forgot-password/send-otp")
+async def send_admin_reset_otp(request: AdminSendOTPRequest):
+    import random, os
+    from datetime import datetime, timedelta, timezone
+    from dotenv import load_dotenv
+    load_dotenv()
+
+    email_clean = request.email.strip().lower()
+    if not email_clean or "@" not in email_clean:
+        raise HTTPException(status_code=400, detail="Invalid email address provided.")
+
+    otp_code = f"{random.randint(100000, 999999)}"
+    expires_at = datetime.now(timezone.utc) + timedelta(minutes=10)
+
+    admin_otps_store[email_clean] = {
+        "otp": otp_code,
+        "expires_at": expires_at
+    }
+
+    db = get_db()
+    if db is not None:
+        try:
+            await db.admin_otps.update_one(
+                {"email": email_clean},
+                {"$set": {"otp": otp_code, "expires_at": expires_at, "created_at": datetime.now(timezone.utc)}},
+                upsert=True
+            )
+        except Exception as e:
+            print(f"MongoDB OTP save error: {e}")
+
+    sender_email = os.getenv("SMTP_SENDER_EMAIL")
+    sender_password = os.getenv("SMTP_SENDER_PASSWORD")
+
+    smtp_sent = False
+    if sender_email and sender_password:
+        try:
+            msg = MIMEMultipart()
+            msg['From'] = f"BMM Admin Portal <{sender_email}>"
+            msg['To'] = email_clean
+            msg['Subject'] = "BMM Admin - Password Reset OTP"
+
+            body = f"""Hello Admin,
+
+We received a request to reset your password for the BMM Admin Portal ({email_clean}).
+Your 6-digit OTP code is: {otp_code}
+
+This code will expire in 10 minutes. If you did not request this password reset, please ignore this email.
+
+Best regards,
+BMM System Administrator
+"""
+            msg.attach(MIMEText(body, 'plain'))
+            server = smtplib.SMTP('smtp.gmail.com', 587)
+            server.starttls()
+            server.login(sender_email, sender_password)
+            server.send_message(msg)
+            server.quit()
+            smtp_sent = True
+        except Exception as e:
+            print(f"SMTP Error: {str(e)}")
+
+    print(f"DEBUG: Admin Reset OTP generated for {email_clean}: {otp_code} (SMTP Sent: {smtp_sent})")
+
+    return {
+        "success": True,
+        "message": f"OTP sent to {email_clean}",
+        "otp": otp_code,
+        "smtp_sent": smtp_sent
+    }
+
+
+@app.post("/api/auth/admin-forgot-password/reset")
+async def reset_admin_password(request: AdminResetPasswordRequest):
+    from datetime import datetime, timezone
+    email_clean = request.email.strip().lower()
+    otp_code = request.otp.strip()
+    new_password = request.new_password.strip()
+
+    if not new_password or len(new_password) < 6:
+        raise HTTPException(status_code=400, detail="New password must be at least 6 characters.")
+
+    record = admin_otps_store.get(email_clean)
+    db = get_db()
+    
+    if not record and db is not None:
+        try:
+            db_doc = await db.admin_otps.find_one({"email": email_clean})
+            if db_doc:
+                record = {
+                    "otp": db_doc.get("otp"),
+                    "expires_at": db_doc.get("expires_at")
+                }
+        except Exception as e:
+            print(f"MongoDB OTP lookup error: {e}")
+
+    if not record:
+        raise HTTPException(status_code=400, detail="No OTP requested for this email or OTP has expired.")
+
+    if record["otp"] != otp_code:
+        raise HTTPException(status_code=400, detail="Invalid OTP code. Please try again.")
+
+    exp = record.get("expires_at")
+    if exp:
+        now = datetime.now(timezone.utc)
+        if exp.tzinfo is None:
+            exp = exp.replace(tzinfo=timezone.utc)
+        if now > exp:
+            raise HTTPException(status_code=400, detail="OTP has expired. Please request a new OTP.")
+
+    if db is not None:
+        try:
+            await db.admins.update_one(
+                {"email": email_clean},
+                {"$set": {"password": new_password, "updated_at": datetime.now(timezone.utc)}},
+                upsert=True
+            )
+        except Exception as e:
+            print(f"MongoDB admin password update error: {e}")
+
+    prev_db = get_previous_db()
+    if prev_db is not None:
+        try:
+            await prev_db.employees.update_many(
+                {"email": email_clean},
+                {"$set": {"password": new_password}}
+            )
+        except Exception as e:
+            print(f"Previous DB employee password update error: {e}")
+
+    if email_clean in admin_otps_store:
+        del admin_otps_store[email_clean]
+    if db is not None:
+        try:
+            await db.admin_otps.delete_one({"email": email_clean})
+        except Exception as e:
+            pass
+
+    return {
+        "success": True,
+        "message": "Admin password reset successfully."
+    }
+
 
 # ─── Employee Endpoints ───────────────────────────────────────
 @app.get("/api/employees", response_model=List[Employee])

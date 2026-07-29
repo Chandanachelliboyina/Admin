@@ -1,14 +1,18 @@
 import React, { useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
-import { Mail, Lock } from 'lucide-react';
+import { Link, useNavigate, useLocation } from 'react-router-dom';
+import { Mail, Lock, CheckCircle2 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 
 export function SignIn() {
   const navigate = useNavigate();
+  const location = useLocation();
   const { login } = useAuth();
   
+  const initialEmail = location.state?.email || '';
+  const isResetSuccess = location.state?.resetSuccess || false;
+
   const [formData, setFormData] = useState({
-    email: '',
+    email: initialEmail,
     password: '',
   });
   const [error, setError] = useState('');
@@ -24,7 +28,6 @@ export function SignIn() {
     e.preventDefault();
     setError('');
     
-    // Check if the user is registered with correct password
     const result = await login(formData.email, formData.password);
     if (result.success) {
       console.log('Logging in with:', formData.email);
@@ -44,6 +47,13 @@ export function SignIn() {
           <h2 className="text-2xl font-bold tracking-tight text-foreground">Welcome Back</h2>
           <p className="text-muted-foreground text-sm mt-2">Sign in to the Admin Dashboard</p>
         </div>
+
+        {isResetSuccess && (
+          <div className="mb-4 p-3 bg-emerald-50 text-emerald-700 text-sm rounded-md border border-emerald-200 flex items-center gap-2">
+            <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+            <span>Password reset successfully! Please sign in with your new password.</span>
+          </div>
+        )}
 
         {error && (
           <div className="mb-4 p-3 bg-red-50 text-red-600 text-sm rounded-md border border-red-100 text-center">
@@ -71,7 +81,7 @@ export function SignIn() {
           <div className="space-y-2">
             <div className="flex justify-between items-center">
               <label className="text-sm font-medium text-foreground">Password</label>
-              <Link to="/forgot-password" className="text-xs text-blue-600 hover:underline">Forgot password?</Link>
+              <Link to="/forgot-password" className="text-xs text-blue-600 hover:underline font-semibold">Forgot password?</Link>
             </div>
             <div className="relative">
               <Lock className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />

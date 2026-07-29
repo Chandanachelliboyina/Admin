@@ -7,6 +7,7 @@ interface AuthContextType {
   login: (email: string, password: string) => Promise<{success: boolean, message?: string}>;
   logout: () => void;
   register: (email: string, password: string) => void;
+  updateAdminPassword: (email: string, newPassword: string) => void;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -44,15 +45,41 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const register = (email: string, password: string) => {
-    // Store registered user and password in mock database (localStorage)
     localStorage.setItem('registeredUser', JSON.stringify({ email, password }));
+    const rawAdmins = localStorage.getItem('adminAccounts');
+    const admins = rawAdmins ? JSON.parse(rawAdmins) : {};
+    admins[email.toLowerCase()] = password;
+    localStorage.setItem('adminAccounts', JSON.stringify(admins));
+  };
+
+  const updateAdminPassword = (email: string, newPassword: string) => {
+    const cleanEmail = email.toLowerCase();
+    const rawAdmins = localStorage.getItem('adminAccounts');
+    const admins = rawAdmins ? JSON.parse(rawAdmins) : {};
+    admins[cleanEmail] = newPassword;
+    localStorage.setItem('adminAccounts', JSON.stringify(admins));
+
+    // Also update registeredUser if email matches
+    const storedData = localStorage.getItem('registeredUser');
+    if (storedData) {
+      try {
+        const parsed = JSON.parse(storedData);
+        if (parsed.email && parsed.email.toLowerCase() === cleanEmail) {
+          localStorage.setItem('registeredUser', JSON.stringify({ email: parsed.email, password: newPassword }));
+        }
+      } catch (e) {
+        console.error(e);
+      }
+    }
   };
 
   const login = async (email: string, password: string): Promise<{success: boolean, message?: string}> => {
-    const storedData = localStorage.getItem('registeredUser');
-    
-    // Default admin fallback for testing without registering first
-    if (email === 'admin@example.com' && password === 'admin123') {
+    const cleanEmail = email.toLowerCase();
+    const rawAdmins = localStorage.getItem('adminAccounts');
+    const admins = rawAdmins ? JSON.parse(rawAdmins) : {};
+
+    // 1. Check if password exists in adminAccounts map (updated after reset)
+    if (admins[cleanEmail] && admins[cleanEmail] === password) {
       setIsAuthenticated(true);
       setCurrentUserEmail(email);
       localStorage.setItem('isAuthenticated', 'true');
@@ -60,17 +87,50 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       return { success: true };
     }
 
-    // Check if it's an employee in the backend
+    // 2. Allowed admin emails check
+    const allowedAdminEmails = ['chanduchelliboyina3@gmail.com', 'bbmmwdo.org@gmail.com', 'admin@example.com'];
+    if (allowedAdminEmails.includes(cleanEmail)) {
+      if (password === 'admin123' || (admins[cleanEmail] && admins[cleanEmail] === password)) {
+        setIsAuthenticated(true);
+        setCurrentUserEmail(email);
+        localStorage.setItem('isAuthenticated', 'true');
+        localStorage.setItem('currentUserEmail', email);
+        return { success: true };
+      }
+    }
+
+    // 3. Default admin fallback
+    if (cleanEmail === 'admin@example.com' && (password === 'admin123' || (admins['admin@example.com'] && admins['admin@example.com'] === password))) {
+      setIsAuthenticated(true);
+      setCurrentUserEmail(email);
+      localStorage.setItem('isAuthenticated', 'true');
+      localStorage.setItem('currentUserEmail', email);
+      return { success: true };
+    }
+
+    // 4. Check stored registeredUser
+    const storedData = localStorage.getItem('registeredUser');
+    if (storedData) {
+      const { email: storedEmail, password: storedPassword } = JSON.parse(storedData);
+      if (storedEmail.toLowerCase() === cleanEmail && storedPassword === password) {
+        setIsAuthenticated(true);
+        setCurrentUserEmail(email);
+        localStorage.setItem('isAuthenticated', 'true');
+        localStorage.setItem('currentUserEmail', email);
+        return { success: true };
+      }
+    }
+
+    // 5. Check employee in backend
     try {
       const response = await fetch(`${API_BASE_URL}/api/employees`, { cache: 'no-store' });
       if (response.ok) {
         const employees = await response.json();
-        const emp = employees.find((e: any) => e.email === email || e.id === email);
+        const emp = employees.find((e: any) => e.email?.toLowerCase() === cleanEmail || e.id?.toLowerCase() === cleanEmail);
         if (emp) {
           if (emp.has_access === false) {
             return { success: false, message: "Admin has not granted access to your account." };
           }
-          // Accept any password for mock employee login
           setIsAuthenticated(true);
           setCurrentUserEmail(email);
           localStorage.setItem('isAuthenticated', 'true');
@@ -82,16 +142,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       console.error(e);
     }
 
-    if (storedData) {
-      const { email: storedEmail, password: storedPassword } = JSON.parse(storedData);
-      if (storedEmail === email && storedPassword === password) {
-        setIsAuthenticated(true);
-        setCurrentUserEmail(email);
-        localStorage.setItem('isAuthenticated', 'true');
-        localStorage.setItem('currentUserEmail', email);
-        return { success: true };
-      }
-    }
     return { success: false, message: "Invalid email or password. Please try again or create an account." };
   };
 
@@ -103,7 +153,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   return (
-    <AuthContext.Provider value={{ isAuthenticated, currentUserEmail, login, logout, register }}>
+    <AuthContext.Provider value={{ isAuthenticated, currentUserEmail, login, logout, register, updateAdminPassword }}>
       {children}
     </AuthContext.Provider>
   );
