@@ -3,7 +3,8 @@ import { API_BASE_URL } from '../config';
 
 export const ALLOWED_ADMIN_EMAILS = [
   'chanduchelliboyina3@gmail.com',
-  'bbmmwdo.org@gmail.com'
+  'bbmmwdo.org@gmail.com',
+  'bbmmwdo.bmm@gmail.com'
 ];
 
 interface AuthContextType {

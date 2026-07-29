@@ -41,7 +41,7 @@ export function SignUp() {
     const emailLower = formData.email.toLowerCase().trim();
 
     if (!ALLOWED_ADMIN_EMAILS.includes(emailLower)) {
-      setEmailError('Unauthorized: Only authorized admin emails (chanduchelliboyina3@gmail.com, bbmmwdo.org@gmail.com) can create an account.');
+      setEmailError('Unauthorized: Only authorized admin emails can create an account.');
       return;
     }
 

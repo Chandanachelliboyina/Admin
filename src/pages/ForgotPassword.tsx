@@ -103,7 +103,7 @@ export function ForgotPassword() {
     }
 
     if (!ALLOWED_ADMIN_EMAILS.includes(cleanEmail)) {
-      setAdminError('Unauthorized: Only authorized admin emails (chanduchelliboyina3@gmail.com, bbmmwdo.org@gmail.com) can request an Admin password reset.');
+      setAdminError('Unauthorized: Only authorized admin emails can request an Admin password reset.');
       return;
     }
 
