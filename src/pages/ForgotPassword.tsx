@@ -111,7 +111,15 @@ export function ForgotPassword() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email: cleanEmail }),
+      }).catch((err) => {
+        console.warn('Network fetch catch:', err);
+        return null;
       });
+
+      if (!res) {
+        setAdminError('Could not connect to backend server. Please ensure backend server is running or configured.');
+        return;
+      }
 
       let data: any = {};
       try {
@@ -130,7 +138,8 @@ export function ForgotPassword() {
       setAdminStep(2);
       setResendTimer(60);
     } catch (err) {
-      setAdminError('Could not connect to backend server. Please ensure backend is running.');
+      console.error('handleSendAdminOtp outer catch:', err);
+      setAdminError('Could not connect to backend server. Please verify your network connection.');
     } finally {
       setIsSendingOtp(false);
     }
@@ -166,7 +175,15 @@ export function ForgotPassword() {
           otp: inputOtp,
           new_password: adminNewPassword,
         }),
+      }).catch((err) => {
+        console.warn('Reset network fetch catch:', err);
+        return null;
       });
+
+      if (!res) {
+        setAdminError('Could not connect to backend server to verify OTP. Please try again.');
+        return;
+      }
 
       let data: any = {};
       try {
@@ -185,6 +202,7 @@ export function ForgotPassword() {
       updateAdminPassword(cleanEmail, adminNewPassword);
       setAdminStep(3);
     } catch (err) {
+      console.error('handleAdminResetSubmit outer catch:', err);
       setAdminError('Could not connect to backend server to verify OTP. Please try again.');
     } finally {
       setIsResetting(false);
