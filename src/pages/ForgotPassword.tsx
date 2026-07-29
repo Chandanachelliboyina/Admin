@@ -112,9 +112,17 @@ export function ForgotPassword() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email: cleanEmail }),
       });
-      const data = await res.json();
+
+      let data: any = {};
+      try {
+        const text = await res.text();
+        if (text) data = JSON.parse(text);
+      } catch (parseErr) {
+        console.error('Response parse error:', parseErr);
+      }
+
       if (!res.ok) {
-        setAdminError(data.detail || 'Failed to send OTP to email. Please check backend.');
+        setAdminError(data.detail || data.message || 'Failed to send OTP to email. Please check backend server.');
         return;
       }
 
@@ -122,7 +130,7 @@ export function ForgotPassword() {
       setAdminStep(2);
       setResendTimer(60);
     } catch (err) {
-      setAdminError('Could not connect to backend server to send OTP. Please check your backend connection.');
+      setAdminError('Could not connect to backend server. Please ensure backend is running.');
     } finally {
       setIsSendingOtp(false);
     }
@@ -159,9 +167,17 @@ export function ForgotPassword() {
           new_password: adminNewPassword,
         }),
       });
-      const data = await res.json();
+
+      let data: any = {};
+      try {
+        const text = await res.text();
+        if (text) data = JSON.parse(text);
+      } catch (parseErr) {
+        console.error('Reset response parse error:', parseErr);
+      }
+
       if (!res.ok) {
-        setAdminError(data.detail || 'Invalid OTP code or OTP expired. Please check your email.');
+        setAdminError(data.detail || data.message || 'Invalid OTP code or OTP expired. Please check your email.');
         return;
       }
 
