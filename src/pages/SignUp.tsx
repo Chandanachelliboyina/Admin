@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { Mail, Lock, User, ArrowRight } from 'lucide-react';
-import { useAuth } from '../contexts/AuthContext';
+import { useAuth, ALLOWED_ADMIN_EMAILS } from '../contexts/AuthContext';
 
 export function SignUp() {
   const navigate = useNavigate();
@@ -38,12 +38,10 @@ export function SignUp() {
     e.preventDefault();
     setEmailError('');
 
-    // Strictly whitelist only the two requested emails
-    const allowedEmails = ['chanduchelliboyina3@gmail.com', 'bbmmwdo.org@gmail.com'];
-    const emailLower = formData.email.toLowerCase();
+    const emailLower = formData.email.toLowerCase().trim();
 
-    if (!allowedEmails.includes(emailLower)) {
-      setEmailError('Unauthorized: Only authorized admin emails can create an account.');
+    if (!ALLOWED_ADMIN_EMAILS.includes(emailLower)) {
+      setEmailError('Unauthorized: Only authorized admin emails (chanduchelliboyina3@gmail.com, bbmmwdo.org@gmail.com) can create an account.');
       return;
     }
 

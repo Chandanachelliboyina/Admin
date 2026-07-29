@@ -180,6 +180,13 @@ async def send_admin_reset_otp(request: AdminSendOTPRequest):
     if not email_clean or "@" not in email_clean:
         raise HTTPException(status_code=400, detail="Invalid email address provided.")
 
+    ALLOWED_ADMIN_EMAILS = ["chanduchelliboyina3@gmail.com", "bbmmwdo.org@gmail.com"]
+    if email_clean not in ALLOWED_ADMIN_EMAILS:
+        raise HTTPException(
+            status_code=403,
+            detail="Unauthorized: Only authorized admin emails (chanduchelliboyina3@gmail.com, bbmmwdo.org@gmail.com) can request a password reset."
+        )
+
     otp_code = f"{random.randint(100000, 999999)}"
     expires_at = datetime.now(timezone.utc) + timedelta(minutes=10)
 

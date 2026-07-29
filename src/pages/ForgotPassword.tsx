@@ -5,7 +5,7 @@ import {
   Clock, XCircle, Loader2, RefreshCw, AlertCircle, ShieldCheck, Lock, Eye, EyeOff, Send, Shield
 } from 'lucide-react';
 import { API_BASE_URL } from '../config';
-import { useAuth } from '../contexts/AuthContext';
+import { useAuth, ALLOWED_ADMIN_EMAILS } from '../contexts/AuthContext';
 
 type RequestStatus = 'pending' | 'approved' | 'rejected';
 
@@ -96,9 +96,14 @@ export function ForgotPassword() {
     setAdminSuccessMsg('');
     setDemoOtp(null);
 
-    const cleanEmail = adminEmail.trim();
+    const cleanEmail = adminEmail.trim().toLowerCase();
     if (!cleanEmail || !cleanEmail.includes('@')) {
       setAdminError('Please enter a valid Admin email address.');
+      return;
+    }
+
+    if (!ALLOWED_ADMIN_EMAILS.includes(cleanEmail)) {
+      setAdminError('Unauthorized: Only authorized admin emails (chanduchelliboyina3@gmail.com, bbmmwdo.org@gmail.com) can request an Admin password reset.');
       return;
     }
 
