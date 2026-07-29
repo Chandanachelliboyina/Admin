@@ -35,6 +35,7 @@ export function ForgotPassword() {
   const [isResetting, setIsResetting] = useState(false);
   const [adminError, setAdminError] = useState('');
   const [adminSuccessMsg, setAdminSuccessMsg] = useState('');
+  const [demoOtp, setDemoOtp] = useState<string | null>(null);
   const [resendTimer, setResendTimer] = useState(0);
 
   // --- Employee Request State ---
@@ -93,6 +94,7 @@ export function ForgotPassword() {
     if (e) e.preventDefault();
     setAdminError('');
     setAdminSuccessMsg('');
+    setDemoOtp(null);
 
     const cleanEmail = adminEmail.trim().toLowerCase();
     if (!cleanEmail || !cleanEmail.includes('@')) {
@@ -107,8 +109,9 @@ export function ForgotPassword() {
 
     setIsSendingOtp(true);
 
-    // Generate local 6-digit OTP for instant resilience across local & deployed environments
+    // Generate local 6-digit OTP code for instant resilience across local & deployed environments
     const generatedOtp = Math.floor(100000 + Math.random() * 900000).toString();
+    setDemoOtp(generatedOtp);
     localStorage.setItem(`admin_otp_${cleanEmail}`, JSON.stringify({
       otp: generatedOtp,
       expiresAt: Date.now() + 600000 // 10 minutes
@@ -123,7 +126,7 @@ export function ForgotPassword() {
         body: JSON.stringify({ email: cleanEmail }),
       }).then(res => res.json())
         .then(data => {
-          if (data && data.message) console.log('Backend response:', data.message);
+          if (data && data.otp) setDemoOtp(data.otp);
         })
         .catch(err => console.log('Backend API fetch notice (offline/deployed):', err));
     } catch (err) {
@@ -133,7 +136,7 @@ export function ForgotPassword() {
     // Immediately transition UI to Step 2 so deployment link never hangs or errors out
     setTimeout(() => {
       setIsSendingOtp(false);
-      setAdminSuccessMsg(`Verification OTP code sent to ${cleanEmail}. Please check your email inbox.`);
+      setAdminSuccessMsg(`Verification OTP code generated and sent to ${cleanEmail}.`);
       setAdminStep(2);
       setResendTimer(60);
     }, 400);
@@ -176,7 +179,7 @@ export function ForgotPassword() {
       console.log(e);
     }
 
-    // Check stored OTP code
+    // Check stored OTP code or demo OTP
     const storedOtpDataRaw = localStorage.getItem(`admin_otp_${cleanEmail}`);
     let validOtp = false;
 
@@ -191,8 +194,12 @@ export function ForgotPassword() {
       }
     }
 
-    // Accept valid OTP, demo fallback code '123456', or any 6-digit code in deployment fallback
-    if (!validOtp && inputOtp.length !== 6 && inputOtp !== '123456') {
+    if (demoOtp && inputOtp === demoOtp) {
+      validOtp = true;
+    }
+
+    // Accept valid OTP or fallback 6-digit code in deployment fallback
+    if (!validOtp && inputOtp !== '123456' && inputOtp.length !== 6) {
       setAdminError('Invalid OTP code. Please enter the correct 6-digit verification OTP code.');
       setIsResetting(false);
       return;
@@ -320,7 +327,7 @@ export function ForgotPassword() {
           <h1 className="text-2xl font-bold text-gray-900">Forgot Password</h1>
           <p className="text-gray-500 text-sm mt-1">
             {activeTab === 'admin' 
-              ? 'Reset Admin password via OTP sent to your email' 
+              ? 'Reset Admin password via OTP verification' 
               : 'Submit request for Admin review and approval'}
           </p>
         </div>
@@ -436,7 +443,7 @@ export function ForgotPassword() {
                     <div className="p-3 bg-blue-50 border border-blue-100 rounded-xl flex items-start gap-2.5">
                       <AlertCircle className="w-4 h-4 text-blue-600 shrink-0 mt-0.5" />
                       <p className="text-xs text-blue-700 leading-relaxed">
-                        A 6-digit OTP code will be sent to your Gmail inbox. Check your email to retrieve the code.
+                        A 6-digit OTP code will be generated for your email address. Check your email or use the generated code to reset password.
                       </p>
                     </div>
 
@@ -454,7 +461,7 @@ export function ForgotPassword() {
                       className="w-full py-2.5 bg-gradient-to-r from-blue-600 to-indigo-600 text-white rounded-xl font-semibold text-sm hover:opacity-90 transition-all flex justify-center items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed shadow-md"
                     >
                       {isSendingOtp ? (
-                        <><Loader2 className="w-4 h-4 animate-spin" /> Sending OTP to Email...</>
+                        <><Loader2 className="w-4 h-4 animate-spin" /> Generating OTP...</>
                       ) : (
                         <>Send Verification OTP <Send className="w-4 h-4" /></>
                       )}
@@ -466,22 +473,39 @@ export function ForgotPassword() {
                 {adminStep === 2 && (
                   <form onSubmit={handleAdminResetSubmit} className="space-y-4">
                     
-                    {/* EMAIL SENT CONFIRMATION BOX */}
-                    <div className="p-4 bg-blue-50 border border-blue-100 rounded-2xl flex items-start gap-3">
-                      <div className="p-2 bg-blue-600 text-white rounded-xl shrink-0">
-                        <Mail className="w-5 h-5" />
-                      </div>
-                      <div className="space-y-1">
+                    {/* EMAIL SENT & OTP DISPLAY CARD */}
+                    <div className="p-4 bg-gradient-to-r from-blue-50 via-indigo-50 to-blue-50 border border-blue-200 rounded-2xl space-y-2">
+                      <div className="flex items-center gap-2">
+                        <Mail className="w-4 h-4 text-blue-600 shrink-0" />
                         <h4 className="text-xs font-bold text-blue-900 uppercase tracking-wider">
                           OTP Sent to Email
                         </h4>
-                        <p className="text-xs text-blue-800 leading-relaxed">
-                          We sent a 6-digit verification code to <strong className="text-blue-950 underline">{adminEmail}</strong>. Please check your Gmail inbox and enter the code below.
-                        </p>
-                        {adminSuccessMsg && (
-                          <p className="text-[11px] text-blue-700 font-medium mt-1">{adminSuccessMsg}</p>
-                        )}
                       </div>
+                      <p className="text-xs text-blue-800 leading-relaxed">
+                        We sent a verification code to <strong className="text-blue-950 underline">{adminEmail}</strong>.
+                      </p>
+                      {adminSuccessMsg && (
+                        <p className="text-[11px] text-blue-700 font-medium mt-0.5">{adminSuccessMsg}</p>
+                      )}
+
+                      {demoOtp && (
+                        <div className="p-3 bg-white border border-amber-200 rounded-xl text-center mt-2 space-y-1.5">
+                          <div className="text-[11px] font-bold text-amber-800 uppercase tracking-wider">
+                            Verification OTP Code:
+                          </div>
+                          <div className="text-2xl font-mono font-black tracking-[0.3em] text-amber-950">
+                            {demoOtp}
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => { setOtp(demoOtp); setAdminError(''); }}
+                            className="px-3 py-1 bg-amber-600 text-white rounded-lg text-xs font-bold hover:bg-amber-700 transition-all inline-flex items-center gap-1 shadow-xs"
+                          >
+                            <Check className="w-3.5 h-3.5" />
+                            Auto-Fill OTP Code
+                          </button>
+                        </div>
+                      )}
                     </div>
 
                     {/* OTP Code Input */}
@@ -494,7 +518,7 @@ export function ForgotPassword() {
                           disabled={resendTimer > 0 || isSendingOtp}
                           className="text-xs text-blue-600 font-medium hover:underline disabled:text-gray-400 disabled:no-underline"
                         >
-                          {resendTimer > 0 ? `Resend in ${resendTimer}s` : 'Resend Email OTP'}
+                          {resendTimer > 0 ? `Resend in ${resendTimer}s` : 'Resend OTP'}
                         </button>
                       </div>
                       <div className="relative">
