@@ -377,7 +377,7 @@ export function AttendanceTracking() {
     if (!matchesSearch) return false;
 
     if (dateFilter === 'today') {
-      return record.date === todayStr;
+      return record.date === todayStr || (record.date && record.date.startsWith(todayStr));
     } else if (dateFilter !== 'all') {
       return record.date === dateFilter;
     }

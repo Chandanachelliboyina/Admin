@@ -829,15 +829,15 @@ async def get_employee_leaves(employee_id: str):
 
 def build_route_points(att):
     """Construct exact location tracking route points for an attendance record (Sign-In -> Present/Sign-Out)."""
-    raw_points = att.get("route_points") or att.get("location_history") or []
+    raw_points = att.get("route_points") or att.get("location_history") or att.get("location_waypoints") or []
     if raw_points and len(raw_points) > 0:
         formatted = []
         for i, pt in enumerate(raw_points):
             formatted.append({
                 "lat": float(pt.get("lat") or pt.get("latitude") or 0),
                 "lng": float(pt.get("lng") or pt.get("longitude") or 0),
-                "address": pt.get("address") or "Exact GPS Location",
-                "time": pt.get("time") or "N/A",
+                "address": pt.get("address") or "Location Checkpoint",
+                "time": pt.get("time") or pt.get("timestamp") or "N/A",
                 "label": pt.get("label") or ("Sign-In Location" if i == 0 else "Present Location"),
                 "type": pt.get("type") or ("signin" if i == 0 else "signout" if i == len(raw_points)-1 else "present")
             })
@@ -888,7 +888,7 @@ async def get_all_attendance():
     if db is None:
         return []
 
-    cursor = db.attendance.find({}).sort("date", -1).limit(200)
+    cursor = db.attendance.find({}).sort("_id", -1).limit(200)
     records = []
     async for att in cursor:
         login_val = att.get("login_time", "N/A")
