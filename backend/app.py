@@ -217,6 +217,8 @@ BMM System Administrator
             print(f"SMTP Error using sender {s_email}: {str(e)}")
 
 
+admin_otps_store = {}
+
 @app.post("/api/auth/admin-forgot-password/send-otp")
 async def send_admin_reset_otp(request: AdminSendOTPRequest, background_tasks: BackgroundTasks):
     import random
@@ -271,6 +273,7 @@ async def send_admin_reset_otp(request: AdminSendOTPRequest, background_tasks: B
 async def reset_admin_password(request: AdminResetPasswordRequest):
     from datetime import datetime, timezone
     target_email = (request.email or request.admin_email or "").strip().lower()
+    email_clean = target_email
     otp_code = (request.otp or "").strip()
     new_password = (request.new_password or "").strip()
 
@@ -2198,8 +2201,8 @@ async def check_active_holiday(date: Optional[str] = None):
     
     target_date = date
     if not target_date:
-        import pytz
-        ist_tz = pytz.timezone('Asia/Kolkata')
+        from datetime import timezone, timedelta
+        ist_tz = timezone(timedelta(hours=5, minutes=30))
         target_date = datetime.now(ist_tz).strftime('%Y-%m-%d')
         
     holiday = await db.holidays.find_one({

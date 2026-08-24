@@ -50,6 +50,7 @@ export function EmployeeManagement() {
       }));
       
       setEmployees(mappedEmployees);
+      setError(null);
     } catch (err: any) {
       console.error(err);
       if (err?.name === 'TimeoutError') {
@@ -248,10 +249,18 @@ export function EmployeeManagement() {
                     </div>
                   </td>
                 </tr>
-              ) : error ? (
+              ) : error && employees.length === 0 ? (
                 <tr>
-                  <td colSpan={6} className="px-6 py-8 text-center text-red-500 font-medium bg-red-50/50">
-                    {error}
+                  <td colSpan={6} className="px-6 py-8 text-center text-rose-600 font-medium bg-rose-50/50">
+                    <div className="flex flex-col items-center justify-center gap-3">
+                      <span>{error}</span>
+                      <button
+                        onClick={() => fetchEmployees()}
+                        className="px-4 py-2 bg-primary text-primary-foreground text-xs font-bold rounded-lg shadow-sm hover:bg-primary/90 transition flex items-center gap-1.5"
+                      >
+                        <span>Retry Loading Employees</span>
+                      </button>
+                    </div>
                   </td>
                 </tr>
               ) : filteredEmployees.length === 0 ? (
