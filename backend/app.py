@@ -1,4 +1,4 @@
-from fastapi import FastAPI, HTTPException, Request
+from fastapi import FastAPI, HTTPException, Request, BackgroundTasks
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from typing import List, Optional
@@ -634,12 +634,8 @@ async def get_employee_attendance(employee_id: str):
 
         if is_holiday:
             status_val = "Holiday"
-        elif check_in_time != "N/A" and check_out_time != "N/A":
+        elif check_in_time != "N/A":
             status_val = "Present"
-        elif check_in_time != "N/A" and check_out_time == "N/A":
-            status_val = "Check-in (Absent)"
-        elif check_in_time == "N/A" and check_out_time != "N/A":
-            status_val = "Check-out (Absent)"
         else:
             status_val = "Absent"
 
@@ -831,6 +827,59 @@ async def get_employee_leaves(employee_id: str):
     return leaves
 
 
+def build_route_points(att):
+    """Construct exact location tracking route points for an attendance record (Sign-In -> Present/Sign-Out)."""
+    raw_points = att.get("route_points") or att.get("location_history") or []
+    if raw_points and len(raw_points) > 0:
+        formatted = []
+        for i, pt in enumerate(raw_points):
+            formatted.append({
+                "lat": float(pt.get("lat") or pt.get("latitude") or 0),
+                "lng": float(pt.get("lng") or pt.get("longitude") or 0),
+                "address": pt.get("address") or "Exact GPS Location",
+                "time": pt.get("time") or "N/A",
+                "label": pt.get("label") or ("Sign-In Location" if i == 0 else "Present Location"),
+                "type": pt.get("type") or ("signin" if i == 0 else "signout" if i == len(raw_points)-1 else "present")
+            })
+        return formatted
+
+    login_lat = float(att.get("gps_latitude") or 0)
+    login_lng = float(att.get("gps_longitude") or 0)
+    logout_lat = float(att.get("logout_gps_latitude") or 0)
+    logout_lng = float(att.get("logout_gps_longitude") or 0)
+
+    if not login_lat and not login_lng:
+        return []
+
+    pts = []
+    login_time_str, logout_time_str, _ = parse_time_and_calc_hrs(att.get("login_time"), att.get("logout_time"))
+    
+    # 1. Sign-In Location (Exact Employee GPS)
+    pts.append({
+        "lat": login_lat,
+        "lng": login_lng,
+        "address": att.get("full_address") or "Sign-In Location",
+        "time": login_time_str if login_time_str != "N/A" else "Sign-In",
+        "label": "Sign-In Location",
+        "type": "signin"
+    })
+
+    # 2. Present / Sign-Out Location (Exact Employee GPS)
+    end_lat = logout_lat if logout_lat != 0 else login_lat
+    end_lng = logout_lng if logout_lng != 0 else login_lng
+
+    pts.append({
+        "lat": end_lat,
+        "lng": end_lng,
+        "address": att.get("logout_full_address") or att.get("full_address") or "Present Location",
+        "time": logout_time_str if logout_time_str != "N/A" else "Active Now",
+        "label": "Sign-Out Location" if logout_lat != 0 else "Present Location",
+        "type": "signout" if logout_lat != 0 else "present"
+    })
+
+    return pts
+
+
 # ─── Global Attendance ──────────────────────────────────────────
 @app.get("/api/attendance")
 async def get_all_attendance():
@@ -874,12 +923,8 @@ async def get_all_attendance():
 
         if is_holiday:
             status_val = "Holiday"
-        elif check_in_time != "N/A" and check_out_time != "N/A":
+        elif check_in_time != "N/A":
             status_val = "Present"
-        elif check_in_time != "N/A" and check_out_time == "N/A":
-            status_val = "Check-in (Absent)"
-        elif check_in_time == "N/A" and check_out_time != "N/A":
-            status_val = "Check-out (Absent)"
         else:
             status_val = "Absent"
 
@@ -905,13 +950,230 @@ async def get_all_attendance():
                 "lng": float(att.get("logout_gps_longitude") or 0),
                 "address": att.get("logout_full_address")
             } if att.get("logout_gps_latitude") else None,
+            "routePoints": build_route_points(att)
         })
     return records
+
+
+from bson import ObjectId
+
+class LocationPointModel(BaseModel):
+    lat: float
+    lng: float
+    address: Optional[str] = "Checkpoint Location"
+    time: Optional[str] = None
+    label: Optional[str] = None
+    type: Optional[str] = "checkpoint"
+
+@app.post("/api/attendance/{attendance_id}/location-point")
+async def add_attendance_location_point(attendance_id: str, point: LocationPointModel):
+    """Add a new GPS location tracking checkpoint to an existing attendance session."""
+    db = get_previous_db()
+    if db is None:
+        raise HTTPException(status_code=500, detail="Database connection unavailable")
+
+    try:
+        obj_id = ObjectId(attendance_id)
+        query = {"_id": obj_id}
+    except Exception:
+        query = {"$or": [{"_id": attendance_id}, {"id": attendance_id}]}
+
+    att_doc = await db.attendance.find_one(query)
+    if not att_doc:
+        raise HTTPException(status_code=404, detail="Attendance record not found")
+
+    existing_pts = att_doc.get("route_points") or []
+
+    # Format timestamp if not provided
+    if not point.time:
+        ist_tz = timezone(timedelta(hours=5, minutes=30))
+        point.time = datetime.now(ist_tz).strftime("%I:%M %p")
+
+    # Format label if not provided
+    if not point.label:
+        point.label = point.address or "Location Update"
+
+    new_pt_dict = point.dict()
+    await db.attendance.update_one(query, {"$push": {"route_points": new_pt_dict}})
+    
+    return {"message": "Location checkpoint added successfully", "point": new_pt_dict}
+
+
+@app.post("/api/employees/{employee_id}/location-point")
+async def add_employee_live_location_point(employee_id: str, point: LocationPointModel):
+    """Push a live GPS location checkpoint for an employee's current session today."""
+    db = get_previous_db()
+    if db is None:
+        raise HTTPException(status_code=500, detail="Database connection unavailable")
+
+    ist_tz = timezone(timedelta(hours=5, minutes=30))
+    today_str = datetime.now(ist_tz).strftime("%Y-%m-%d")
+
+    import re
+    regex_id = re.compile(f"^{re.escape(employee_id)}$", re.IGNORECASE)
+    att_doc = await db.attendance.find_one({
+        "$or": [{"employee_id": regex_id}, {"empId": regex_id}],
+        "$or": [{"login_date": today_str}, {"date": today_str}]
+    })
+
+    if not att_doc:
+        att_doc_id = await db.attendance.insert_one({
+            "employee_id": employee_id,
+            "empId": employee_id,
+            "date": today_str,
+            "login_date": today_str,
+            "login_time": datetime.now(timezone.utc).isoformat(),
+            "gps_latitude": point.lat,
+            "gps_longitude": point.lng,
+            "full_address": point.address or "Live Tracked Location",
+            "route_points": []
+        })
+        query = {"_id": att_doc_id.inserted_id}
+        existing_pts = []
+    else:
+        query = {"_id": att_doc["_id"]}
+        existing_pts = att_doc.get("route_points") or []
+
+    if not point.time:
+        point.time = datetime.now(ist_tz).strftime("%I:%M %p")
+
+    if not point.label:
+        next_letter = chr(65 + len(existing_pts)) if len(existing_pts) < 26 else f"P{len(existing_pts)+1}"
+        point.label = f"Point {next_letter}: {point.address}"
+
+    new_pt_dict = point.dict()
+    await db.attendance.update_one(query, {"$push": {"route_points": new_pt_dict}})
+
+    return {"message": "Live location point recorded", "point": new_pt_dict}
+
+
+class EmployeeSignInModel(BaseModel):
+    lat: float
+    lng: float
+    address: Optional[str] = "Sign-In Location"
+    selfie_b64: Optional[str] = ""
+
+class EmployeeSignOutModel(BaseModel):
+    lat: float
+    lng: float
+    address: Optional[str] = "Sign-Out Location"
+
+@app.post("/api/employees/{employee_id}/signin")
+async def employee_sign_in(employee_id: str, data: EmployeeSignInModel):
+    """Record employee sign-in with live GPS location from employee portal/app."""
+    db = get_previous_db()
+    if db is None:
+        raise HTTPException(status_code=500, detail="Database connection unavailable")
+
+    ist_tz = timezone(timedelta(hours=5, minutes=30))
+    now = datetime.now(ist_tz)
+    today_str = now.strftime("%Y-%m-%d")
+    time_str = now.strftime("%I:%M %p")
+
+    import re
+    regex_id = re.compile(f"^{re.escape(employee_id)}$", re.IGNORECASE)
+
+    emp_doc = await db.employees.find_one({"$or": [{"employee_id": regex_id}, {"id": regex_id}]})
+    emp_name = emp_doc.get("full_name", emp_doc.get("name", employee_id)) if emp_doc else employee_id
+
+    signin_pt = {
+        "lat": data.lat,
+        "lng": data.lng,
+        "address": data.address,
+        "time": time_str,
+        "label": "Sign-In Location",
+        "type": "signin"
+    }
+
+    # Insert today's attendance record
+    att_doc = {
+        "employee_id": str(employee_id),
+        "empId": str(employee_id),
+        "employee_name": emp_name,
+        "full_name": emp_name,
+        "date": today_str,
+        "login_date": today_str,
+        "login_time": now.isoformat(),
+        "hrs": "Active",
+        "status": "Present",
+        "gps_latitude": data.lat,
+        "gps_longitude": data.lng,
+        "full_address": data.address,
+        "selfie_b64": data.selfie_b64,
+        "route_points": [signin_pt]
+    }
+
+    query = {"employee_id": str(employee_id), "login_date": today_str}
+    result = await db.attendance.update_one(query, {"$set": att_doc}, upsert=True)
+    return {
+        "message": f"Employee {emp_name} signed in successfully",
+        "id": str(result.upserted_id or "updated"),
+        "checkIn": time_str,
+        "location": data.address
+    }
+
+
+@app.post("/api/employees/{employee_id}/signout")
+async def employee_sign_out(employee_id: str, data: EmployeeSignOutModel):
+    """Record employee sign-out with live GPS location from employee portal/app."""
+    db = get_previous_db()
+    if db is None:
+        raise HTTPException(status_code=500, detail="Database connection unavailable")
+
+    ist_tz = timezone(timedelta(hours=5, minutes=30))
+    now = datetime.now(ist_tz)
+    today_str = now.strftime("%Y-%m-%d")
+    time_str = now.strftime("%I:%M %p")
+
+    import re
+    regex_id = re.compile(f"^{re.escape(employee_id)}$", re.IGNORECASE)
+
+    att_doc = await db.attendance.find_one({
+        "$or": [{"employee_id": regex_id}, {"empId": regex_id}],
+        "$or": [{"login_date": today_str}, {"date": today_str}]
+    })
+
+    if not att_doc:
+        raise HTTPException(status_code=404, detail="No active sign-in record found for today")
+
+    signout_pt = {
+        "lat": data.lat,
+        "lng": data.lng,
+        "address": data.address,
+        "time": time_str,
+        "label": "Sign-Out Location",
+        "type": "signout"
+    }
+
+    # Calculate hours worked
+    check_in_time, check_out_time, hrs_worked = parse_time_and_calc_hrs(att_doc.get("login_time"), now.isoformat())
+
+    await db.attendance.update_one(
+        {"_id": att_doc["_id"]},
+        {
+            "$set": {
+                "logout_time": now.isoformat(),
+                "logout_gps_latitude": data.lat,
+                "logout_gps_longitude": data.lng,
+                "logout_full_address": data.address,
+                "hrs": hrs_worked
+            },
+            "$push": {"route_points": signout_pt}
+        }
+    )
+
+    return {
+        "message": "Employee signed out successfully",
+        "checkOut": time_str,
+        "location": data.address
+    }
+
 
 
 # ─── Global Activities ────────────────────────────────────────
 @app.get("/api/activities")
 async def get_all_activities():
+
     """Fetch recent activities (from attendance and activities collections)."""
     db = get_previous_db()
     if db is None:
